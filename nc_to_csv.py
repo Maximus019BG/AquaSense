@@ -2,9 +2,10 @@ import xarray as xr
 import pandas as pd
 import os
 
-INPUT_DIR = "./docs/raw_data"
-OUTPUT_DIR = "./docs/processed"
+INPUT_DIR = "./docs/data/raw"
+OUTPUT_DIR = "./docs/data/processed"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 
 def extract_timeseries(nc_file, variables):
     ds = xr.open_dataset(nc_file)
@@ -38,26 +39,31 @@ def extract_timeseries(nc_file, variables):
 
 
 # ── Извличане ──────────────────────────────────────────────────────────────
-df_temp     = extract_timeseries(f"{INPUT_DIR}/temperature.nc", ["thetao"])
-df_ssh      = extract_timeseries(f"{INPUT_DIR}/sea-level.nc",   ["zos"])
-df_bgc      = extract_timeseries(f"{INPUT_DIR}/pp-n-o2.nc",   ["o2", "nppv"])
-df_sal      = extract_timeseries(f"{INPUT_DIR}/salinity.nc",    ["so"])
-df_nut      = extract_timeseries(f"{INPUT_DIR}/nutrients.nc",   ["no3", "po4"])
+df_temp = extract_timeseries(f"{INPUT_DIR}/temperature.nc", ["thetao"])
+df_ssh = extract_timeseries(f"{INPUT_DIR}/sea-level.nc", ["zos"])
+df_bgc = extract_timeseries(f"{INPUT_DIR}/pp-n-o2.nc", ["o2", "nppv"])
+df_sal = extract_timeseries(f"{INPUT_DIR}/salinity.nc", ["so"])
+df_nut = extract_timeseries(f"{INPUT_DIR}/nutrients.nc", ["no3", "po4"])
 
 # ── Преименуване ───────────────────────────────────────────────────────────
-if df_temp is not None: df_temp = df_temp.rename(columns={"thetao": "temperature_C"})
-if df_ssh  is not None: df_ssh  = df_ssh.rename(columns={"zos": "sea_level_m"})
-if df_bgc  is not None: df_bgc  = df_bgc.rename(columns={"o2": "dissolved_o2", "nppv": "primary_production"})
-if df_sal  is not None: df_sal  = df_sal.rename(columns={"so": "salinity_psu"})
-if df_nut  is not None: df_nut  = df_nut.rename(columns={"no3": "nitrate", "po4": "phosphate"})
+if df_temp is not None:
+    df_temp = df_temp.rename(columns={"thetao": "temperature_C"})
+if df_ssh is not None:
+    df_ssh = df_ssh.rename(columns={"zos": "sea_level_m"})
+if df_bgc is not None:
+    df_bgc = df_bgc.rename(columns={"o2": "dissolved_o2", "nppv": "primary_production"})
+if df_sal is not None:
+    df_sal = df_sal.rename(columns={"so": "salinity_psu"})
+if df_nut is not None:
+    df_nut = df_nut.rename(columns={"no3": "nitrate", "po4": "phosphate"})
 
 # ── Запис на отделни CSV-та ────────────────────────────────────────────────
 for name, df in [
-    ("temperature",  df_temp),
-    ("sea_level",    df_ssh),
-    ("o2",           df_bgc),
-    ("salinity",     df_sal),
-    ("nutrients",    df_nut),
+    ("temperature", df_temp),
+    ("sea_level", df_ssh),
+    ("o2", df_bgc),
+    ("salinity", df_sal),
+    ("nutrients", df_nut),
 ]:
     if df is not None:
         df.to_csv(f"{OUTPUT_DIR}/{name}.csv", index=False)
@@ -67,8 +73,13 @@ for name, df in [
 print("\n🔗 Обединяване в burgas_final.csv...")
 
 # Вземи файла с най-много точки като база
-all_dfs = [(df_ssh, "sea_level"), (df_temp, "temperature"),
-           (df_bgc, "bgc"), (df_sal, "salinity"), (df_nut, "nutrients")]
+all_dfs = [
+    (df_ssh, "sea_level"),
+    (df_temp, "temperature"),
+    (df_bgc, "bgc"),
+    (df_sal, "salinity"),
+    (df_nut, "nutrients"),
+]
 all_dfs = [(df, name) for df, name in all_dfs if df is not None]
 
 base = all_dfs[0][0].copy()
@@ -79,7 +90,7 @@ for df, label in all_dfs[1:]:
         df.sort_values("time"),
         on="time",
         direction="nearest",
-        tolerance=pd.Timedelta("5D")
+        tolerance=pd.Timedelta("5D"),
     )
     print(f"   + {label}: {len(base)} реда след merge")
 

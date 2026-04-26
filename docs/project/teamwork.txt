@@ -1,0 +1,30 @@
+Team roles (5 people)
+Person 1 — Simulation engine. Pure Python. Writes a script that generates realistic time-series for all 5 parameters using NumPy. Critically: it must inject synthetic anomaly events (sudden pH drop = pollution spike, temperature stratification = thermal layer shift). This is what makes the project original — you're not just reading sensors, you're modeling a real water body's behavior.
+Person 2 — AI models. Trains an Isolation Forest on the clean simulated data to detect anomalies in real-time. Trains a simple LSTM (Keras/TensorFlow) to produce a 24-hour forecast of each parameter. This is what scores the AI bonus criterion.
+Person 3 — Backend. FastAPI app that subscribes to the MQTT stream from Person 1, runs the models from Person 2, and exposes clean REST endpoints: /live, /forecast, /alerts.
+Person 4 — 3D water scene. Three.js (or Plotly 3D as a simpler fallback). A rendered sea/river surface whose color and choppiness change in real-time based on incoming parameter values. When pH drops, the water turns slightly red. When dissolved O₂ is low, a warning pulse appears. This is the showstopper visual at the demo.
+Person 5 — Dashboard + presentation. Assembles the full frontend: live Chart.js graphs for each parameter, an alert timeline panel, the 24h forecast chart, and the 3D scene. Also owns the demo narrative and slide deck.
+
+Why this wins
+Most teams will show a sensor feeding a number into a graph. Your system will show a living 3D water body that predicts the future and detects invisible pollution — standing next to actual seawater on Saint Anastasia Island. The jury will remember exactly one project.
+
+Want me to start writing the actual code? I'd suggest beginning with the simulation engine (Person 1) since everything else depends on it.turn the diagram into plain text4:25 PMHere's the architecture as plain text:
+
+LAYER 1 — Data Ingestion (simulated or real sensor readings)
+Temperature · pH · Turbidity · Dissolved O₂ · Water level
+↓
+LAYER 2 — Simulation Engine (Python)
+Generates realistic time-series with noise, drift, and anomaly events
+→ NumPy / SciPy · Inject anomaly events · MQTT publish (real-time stream)
+↓
+LAYER 3 — AI Brain (Python)
+Learns normal patterns, predicts future state, raises alerts
+→ Isolation Forest (anomaly detection) · LSTM (24h forecast) · Alert classifier (rule + ML)
+↓
+LAYER 4 — FastAPI Backend
+Serves live data, predictions and alerts as JSON endpoints
+→ /live · /forecast · /alerts
+↓
+LAYER 5 — Digital Twin Dashboard
+Live 3D water body + real-time charts + alert panel
+→ Three.js water scene · Chart.js live graphs · Alert timeline · 24h forecast
