@@ -9,6 +9,7 @@
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
+    "ignoreDeprecations": "6.0",
 
     /* Strictness */
     "strict": true,
