@@ -13,6 +13,8 @@ import {
   Eye,
   Wind,
   Ruler,
+  Sun,
+  Moon,
 } from "lucide-react";
 import type { Alert } from "~/types";
 
@@ -32,14 +34,6 @@ const INITIAL_SENSORS: SensorValues = {
   dissolvedOxygen: 8.5,
   waterLevel: 250,
   alertLevel: "none",
-};
-
-const SPARKLINES = {
-  temperature: [23.1, 23.8, 24.2, 24.0, 24.5, 24.3, 24.5],
-  ph: [7.1, 7.15, 7.18, 7.2, 7.22, 7.2, 7.2],
-  turbidity: [16.1, 15.8, 15.5, 15.6, 15.3, 15.4, 15.3],
-  "dissolved-oxygen": [8.2, 8.3, 8.4, 8.35, 8.5, 8.45, 8.5],
-  "water-level": [255, 253, 251, 250, 250, 250, 250],
 };
 
 const mockAlerts: Alert[] = [
@@ -78,9 +72,26 @@ function getStatus(id: string, value: number): "normal" | "warning" | "critical"
   return "normal";
 }
 
+function formatTime(hour: number): string {
+  const h = Math.floor(hour);
+  const m = Math.floor((hour - h) * 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function getTimeDescription(hour: number): string {
+  if (hour >= 5 && hour < 8) return "Dawn";
+  if (hour >= 8 && hour < 12) return "Morning";
+  if (hour >= 12 && hour < 14) return "Midday";
+  if (hour >= 14 && hour < 18) return "Afternoon";
+  if (hour >= 18 && hour < 21) return "Evening";
+  if (hour >= 21 || hour < 5) return "Night";
+  return "Day";
+}
+
 export default function DashboardPage() {
   const [sensors, setSensors] = useState<SensorValues>(INITIAL_SENSORS);
   const [quality, setQuality] = useState<"PERF" | "HIGH" | "ULTRA">("ULTRA");
+  const [timeOfDay, setTimeOfDay] = useState(12);
   const [syncAgo, setSyncAgo] = useState(0);
 
   useEffect(() => {
@@ -194,6 +205,10 @@ export default function DashboardPage() {
     setQuality(q);
   }, []);
 
+  const handleTimeChange = useCallback((hour: number) => {
+    setTimeOfDay(hour);
+  }, []);
+
   return (
     <div className="grid grid-cols-12 gap-6">
       <div className="col-span-2">
@@ -217,6 +232,7 @@ export default function DashboardPage() {
             waterLevel={sensorData.waterLevel}
             alertLevel={sensorData.alertLevel}
             quality={quality}
+            timeOfDay={timeOfDay}
           />
 
           <div className="absolute bottom-3 right-3 z-30 flex gap-1">
@@ -240,6 +256,34 @@ export default function DashboardPage() {
             <span className="text-[10px] text-[#94A3B8] font-mono">
               LIVE · sync {syncAgo}s ago
             </span>
+          </div>
+
+          <div className="absolute top-2.5 left-3 z-20 flex items-center gap-2 bg-[rgba(10,25,41,0.8)] border border-[rgba(255,193,7,0.15)] rounded-full px-3 py-1.5">
+            {timeOfDay >= 6 && timeOfDay < 20 ? (
+              <Sun size={14} color="#FFD700" />
+            ) : (
+              <Moon size={14} color="#AADDFF" />
+            )}
+            <input
+              type="range"
+              min="0"
+              max="23.9"
+              step="0.1"
+              value={timeOfDay}
+              onChange={(e) => handleTimeChange(parseFloat(e.target.value))}
+              className="w-16 h-1 accent-[#FFD700] cursor-pointer"
+            />
+            <span className="text-[10px] text-[#94A3B8] font-mono min-w-[40px]">
+              {formatTime(timeOfDay)} · {getTimeDescription(timeOfDay)}
+            </span>
+          </div>
+
+          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 text-[9px] text-[#475569]">
+            <span> BLACK SEA DIGITAL TWIN</span>
+            <span className="mx-1">|</span>
+            <span>Depth: ~2215m max</span>
+            <span className="mx-1">|</span>
+            <span>Surface Area: ~436,400 km²</span>
           </div>
         </div>
 
