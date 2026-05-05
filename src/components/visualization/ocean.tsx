@@ -61,7 +61,7 @@ varying float vFoam;
 varying float vElevation;
 
 void gerstner(vec2 d, float amp, float wl, float steep, float t,
-              vec3 posIn, inout vec3 posOut, inout vec3 normAccum){
+               vec3 posIn, inout vec3 posOut, inout vec3 normAccum){
   float k = TWO_PI/wl;
   float c = sqrt(GRAV/k);
   float f = k*dot(d, posIn.xy) - c*t;
@@ -241,11 +241,7 @@ void main(){
   float heat = clamp((u_temperature-28.0)/12.0, 0.0, 1.0);
   col += vec3(0.20,0.03,0.0)*heat*(1.0-depth)*0.25;
 
-  float fogDensity = 0.015 + clamp(u_turbidity/100.0,0.0,1.0)*0.05;
-  float fog = 1.0-exp(-length(vWorldPos-uCameraPos)*fogDensity);
-  col = mix(col, vec3(0.005,0.018,0.045), fog*0.65);
-
-  float alpha = 0.88 + Fr*0.10;
+  float alpha = 0.95;
   gl_FragColor = vec4(col, alpha);
 }
 `;
@@ -258,6 +254,7 @@ interface OceanProps {
   waterLevel?: number;
   alertLevel?: "none" | "warning" | "critical";
   quality?: "PERF" | "HIGH" | "ULTRA";
+  timeOfDay?: number;
 }
 
 export function Ocean({
@@ -268,6 +265,7 @@ export function Ocean({
   waterLevel = 250,
   alertLevel = "none",
   quality = "ULTRA",
+  timeOfDay = 12,
 }: OceanProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
@@ -276,8 +274,8 @@ export function Ocean({
   const tier = quality === "ULTRA" ? 2 : quality === "HIGH" ? 1 : 0;
   const segs = quality === "ULTRA" ? 256 : quality === "HIGH" ? 192 : 96;
 
-  const sunDir = useMemo(() => new THREE.Vector3(0.45, 0.72, 0.53).normalize(), []);
-  const sunColor = useMemo(() => new THREE.Color(1.0, 0.93, 0.78), []);
+  const sunDir = useMemo(() => new THREE.Vector3(0.4, 0.7, 0.5).normalize(), []);
+  const sunColor = useMemo(() => new THREE.Color(1.0, 0.98, 0.9), []);
 
   const uniforms = useMemo(
     () => ({
@@ -312,7 +310,7 @@ export function Ocean({
 
   return (
     <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1, 0]}>
-      <planeGeometry args={[28, 28, segs, segs]} />
+      <planeGeometry args={[100, 100, segs, segs]} />
       <shaderMaterial
         ref={materialRef}
         vertexShader={OCEAN_VERT}

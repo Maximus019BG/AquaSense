@@ -40,8 +40,8 @@ function SeaFloor() {
 
   const floorMaterial = useMemo(() => {
     return new THREE.MeshStandardMaterial({
-      color: "#1a2a1a",
-      roughness: 0.9,
+      color: "#2a3a2a",
+      roughness: 0.85,
       metalness: 0.1,
     });
   }, []);
@@ -393,38 +393,202 @@ function FishSchool() {
   );
 }
 
-function AtmosphericConditions({ timeOfDay }: { timeOfDay: number }) {
-  const sunPosition = useMemo(() => {
+function Islands() {
+  const islands = useMemo(() => {
+    const data = [];
+    const positions = [
+      { x: 22, z: 15 },
+      { x: -18, z: 20 },
+      { x: 20, z: -18 },
+      { x: -22, z: -15 },
+      { x: 0, z: 25 },
+      { x: 0, z: -25 },
+      { x: 25, z: 0 },
+      { x: -25, z: 0 },
+    ];
+    for (let i = 0; i < positions.length; i++) {
+      data.push({
+        x: positions[i].x + (Math.random() - 0.5) * 3,
+        z: positions[i].z + (Math.random() - 0.5) * 3,
+        scale: 1 + Math.random() * 2,
+      });
+    }
+    return data;
+  }, []);
+
+  return (
+    <group>
+      {islands.map((island, i) => (
+        <group key={i} position={[island.x, SEA_FLOOR_Y + island.scale * 0.2, island.z]}>
+          <mesh castShadow receiveShadow>
+            <sphereGeometry args={[island.scale, 8, 6]} />
+            <meshStandardMaterial color="#3d5c3d" roughness={0.95} />
+          </mesh>
+          {[0, 1, 2].map((j) => (
+            <mesh key={j} position={[j * 0.3 - 0.3, island.scale * 0.8, j * 0.2]} castShadow>
+              <coneGeometry args={[0.4, 1.2 + j * 0.3, 6]} />
+              <meshStandardMaterial color="#1a4a1a" roughness={0.9} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function MountainRing() {
+  const mountains = useMemo(() => {
+    const mtnData = [];
+    const count = 24;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const distance = 35 + Math.random() * 15;
+      const x = Math.cos(angle) * distance;
+      const z = Math.sin(angle) * distance;
+      const height = 8 + Math.random() * 18;
+      const width = 6 + Math.random() * 10;
+      mtnData.push({ x, z, height, width, angle: angle + Math.PI });
+    }
+    return mtnData;
+  }, []);
+
+  return (
+    <group>
+      {mountains.map((mtn, i) => (
+        <mesh key={i} position={[mtn.x, mtn.height / 2 - 5, mtn.z]} rotation={[0, mtn.angle, 0]} receiveShadow castShadow>
+          <coneGeometry args={[mtn.width, mtn.height, 6]} />
+          <meshStandardMaterial color="#228B22" roughness={0.9} metalness={0.0} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function DistantMountains() {
+  const peaks = useMemo(() => {
+    const data = [];
+    for (let i = 0; i < 40; i++) {
+      const angle = (i / 40) * Math.PI * 2;
+      const distance = 55 + Math.random() * 20;
+      const x = Math.cos(angle) * distance;
+      const z = Math.sin(angle) * distance;
+      const height = 15 + Math.random() * 25;
+      const width = 8 + Math.random() * 15;
+      data.push({ x, z, height, width, angle: angle + Math.PI });
+    }
+    return data;
+  }, []);
+
+  return (
+    <group>
+      {peaks.map((peak, i) => (
+        <mesh key={i} position={[peak.x, peak.height / 2 - 3, peak.z]} rotation={[0, peak.angle, 0]}>
+          <coneGeometry args={[peak.width, peak.height, 5]} />
+          <meshStandardMaterial color="#1E7B1E" roughness={0.9} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function Stars({ visible }: { visible: boolean }) {
+  const starsRef = useRef<THREE.Points>(null);
+  const count = 800;
+
+  const positions = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 0.5;
+      const r = 80 + Math.random() * 20;
+      pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      pos[i * 3 + 1] = r * Math.cos(phi) + 20;
+      pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    }
+    return pos;
+  }, []);
+
+  return (
+    <points ref={starsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+      </bufferGeometry>
+      <pointsMaterial size={0.4} color="#ffffff" transparent opacity={visible ? 1.0 : 0} sizeAttenuation />
+    </points>
+  );
+}
+
+function Moon({ visible, timeOfDay }: { visible: boolean; timeOfDay: number }) {
+  const moonAngle = useMemo(() => -Math.PI / 2 + (timeOfDay / 24) * Math.PI * 2, [timeOfDay]);
+  const moonPos = useMemo(() => {
+    const angle = moonAngle;
+    return [Math.cos(angle) * 70, Math.sin(angle) * 50 + 15, -30] as [number, number, number];
+  }, [moonAngle]);
+
+  if (!visible) return null;
+
+  return (
+    <group position={moonPos}>
+      <mesh>
+        <sphereGeometry args={[3, 32, 32]} />
+        <meshStandardMaterial color="#e8e8d0" emissive="#e8e8d0" emissiveIntensity={0.3} roughness={0.9} />
+      </mesh>
+      <pointLight color="#e8e8d0" intensity={0.3} distance={50} />
+    </group>
+  );
+}
+
+function Sun({ visible, timeOfDay }: { visible: boolean; timeOfDay: number }) {
+  const sunPos = useMemo(() => {
     const angle = (timeOfDay / 24) * Math.PI * 2 - Math.PI / 2;
-    const x = Math.cos(angle) * 100;
-    const y = Math.sin(angle) * 100;
-    return [x, y, 50];
+    return [Math.cos(angle) * 80, Math.sin(angle) * 60 + 10, 30] as [number, number, number];
   }, [timeOfDay]);
 
-  const sunIntensity = useMemo(() => {
-    if (timeOfDay < 6 || timeOfDay > 20) return 0.1;
-    if (timeOfDay < 8 || timeOfDay > 18) return 0.5;
-    return 1.0;
-  }, [timeOfDay]);
+  if (!visible) return null;
 
-  const ambientColor = useMemo(() => {
-    if (timeOfDay < 6) return "#1a1a3a";
-    if (timeOfDay < 8) return "#2a3a4a";
-    if (timeOfDay > 18) return "#2a1a3a";
-    if (timeOfDay > 20) return "#1a1a3a";
-    return "#4a6a8a";
-  }, [timeOfDay]);
+  return (
+    <group position={sunPos}>
+      <mesh>
+        <sphereGeometry args={[6, 32, 32]} />
+        <meshBasicMaterial color="#FFFF00" />
+      </mesh>
+      <pointLight color="#FFFF00" intensity={2} distance={150} />
+    </group>
+  );
+}
 
+function Sky({ timeOfDay }: { timeOfDay: number }) {
+  const isDay = timeOfDay > 6 && timeOfDay < 18;
+  const isSunrise = (timeOfDay >= 5 && timeOfDay <= 7) || (timeOfDay >= 17 && timeOfDay <= 19);
+  const isSunset = timeOfDay >= 17 && timeOfDay <= 19;
+  const isNight = timeOfDay < 5 || timeOfDay > 19;
+
+  const skyColor = "#87CEEB";
+
+  return (
+    <mesh position={[0, 30, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <sphereGeometry args={[100, 32, 32]} />
+      <meshBasicMaterial color="#87CEEB" side={THREE.BackSide} />
+    </mesh>
+  );
+}
+
+function AtmosphericConditions({ timeOfDay }: { timeOfDay: number }) {
   return (
     <>
       <directionalLight
-        position={sunPosition}
-        intensity={sunIntensity}
-        color={timeOfDay > 6 && timeOfDay < 20 ? "#fff5e0" : "#6688aa"}
+        position={[50, 80, 30]}
+        intensity={1.5}
+        color="#fff5e0"
         castShadow
         shadow-mapSize={[2048, 2048]}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
       />
-      <hemisphereLight args={[ambientColor, "#0a1520", sunIntensity * 0.5 + 0.2]} />
+      <hemisphereLight args={["#87CEEB", "#444444", 0.8]} />
+      <ambientLight intensity={0.3} color="#ffffff" />
     </>
   );
 }
@@ -438,11 +602,24 @@ function Scene({
   quality: "PERF" | "HIGH" | "ULTRA";
   timeOfDay: number;
 }) {
+  const isNight = timeOfDay < 5 || timeOfDay > 19;
+  const isDay = timeOfDay > 6 && timeOfDay < 18;
+
   return (
     <>
       <AtmosphericConditions timeOfDay={timeOfDay} />
 
-      <pointLight position={[0, -2, 0]} color="#0a4a6a" intensity={0.4} distance={15} />
+      <Sky timeOfDay={timeOfDay} />
+      <Stars visible={false} />
+      <Moon visible={false} timeOfDay={timeOfDay} />
+      <Sun visible={true} timeOfDay={12} />
+
+      <MountainRing />
+      <Islands />
+      <DistantMountains />
+
+      <pointLight position={[0, -2, 0]} color="#0a5a7a" intensity={0.8} distance={20} />
+      <pointLight position={[0, -4, 0]} color="#0a3a5a" intensity={0.5} distance={25} />
       <pointLight
         position={[0, -1, 0]}
         color={sensorData.alertLevel === "critical" ? "#ff4444" : sensorData.alertLevel === "warning" ? "#ffaa00" : "#00aaff"}
@@ -450,9 +627,9 @@ function Scene({
         distance={10}
       />
 
-      <PerspectiveCamera makeDefault position={[0, 3, 12]} fov={60} />
+<PerspectiveCamera makeDefault position={[0, 3, 12]} fov={60} />
 
-      <Ocean
+          <Ocean
         turbidity={sensorData.turbidity}
         ph={sensorData.ph}
         dissolvedOxygen={sensorData.dissolvedOxygen}
@@ -460,6 +637,7 @@ function Scene({
         waterLevel={sensorData.waterLevel}
         alertLevel={sensorData.alertLevel}
         quality={quality}
+        timeOfDay={timeOfDay}
       />
 
       <SeaFloor />
@@ -516,7 +694,7 @@ function WaterSceneCanvas({
   timeOfDay: number;
 }) {
   return (
-    <div className="w-full h-full bg-[#010a14]">
+    <div className="w-full h-full bg-transparent">
       <Suspense fallback={<LoadingFallback />}>
         <Canvas
           gl={{
@@ -526,11 +704,10 @@ function WaterSceneCanvas({
           }}
           dpr={[1, 2]}
           camera={{ position: [0, 3, 12], fov: 60 }}
-          style={{ background: "#010a14" }}
+          style={{ background: "transparent" }}
           frameloop="always"
           shadows
         >
-          <fog attach="fog" args={["#010a14", 5, 50]} />
           <Scene sensorData={sensorData} quality={quality} timeOfDay={timeOfDay} />
         </Canvas>
       </Suspense>
