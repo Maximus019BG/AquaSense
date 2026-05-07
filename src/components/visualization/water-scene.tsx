@@ -5,12 +5,26 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import {
   OrbitControls,
   PerspectiveCamera,
-  Float,
-  Environment,
 } from "@react-three/drei";
 import * as THREE from "three";
 import { Ocean } from "./ocean";
 import { AnomalyMarkers } from "./anomaly-markers";
+
+const BLACK_SEA_DEPTH = 8;
+const SEA_FLOOR_Y = -BLACK_SEA_DEPTH;
+
+const MOUNTAIN_COLORS = ["#3d5033", "#2d3a2a", "#354530", "#283328"];
+const SNOW_COLOR = "#e0e0e0";
+
+// Add minimal type definitions used in this file
+interface SensorData {
+  temperature: number;
+  ph: number;
+  turbidity: number;
+  dissolvedOxygen: number;
+  waterLevel: number;
+  alertLevel: "none" | "warning" | "critical";
+}
 
 interface WaterSceneProps {
   turbidity?: number;
@@ -23,17 +37,46 @@ interface WaterSceneProps {
   timeOfDay?: number;
 }
 
-interface SensorData {
-  temperature: number;
-  ph: number;
-  turbidity: number;
-  dissolvedOxygen: number;
-  waterLevel: number;
-  alertLevel: "none" | "warning" | "critical";
+function StaticMountainGeometry({ seed, radius, height }: { seed: number; radius: number; height: number }) {
+  const geo = useMemo(() => {
+    const g = new THREE.ConeGeometry(radius, height, 8, 5);
+    const pos = g.attributes.position! as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      if (y > height * 0.1) {
+        const angle = Math.atan2(pos.getZ(i), pos.getX(i));
+        const noise = (Math.sin(seed * i * 0.5) * 0.5) * radius * 0.25;
+        pos.setX(i, pos.getX(i) + Math.cos(angle) * noise);
+        pos.setZ(i, pos.getZ(i) + Math.sin(angle) * noise);
+      }
+    }
+    g.computeVertexNormals();
+    return g;
+  }, [seed, radius, height]);
+
+  return <primitive object={geo} attach="geometry" />;
 }
 
-const BLACK_SEA_DEPTH = 8;
-const SEA_FLOOR_Y = -BLACK_SEA_DEPTH;
+function NearMountain({ seed, x, z, scale, height, radius, hasSnow }: { seed: number; x: number; z: number; scale: number; height: number; radius: number; hasSnow: boolean }) {
+  const colorIndex = Math.abs(Math.sin(seed * 777)) * MOUNTAIN_COLORS.length >> 0;
+  const color = MOUNTAIN_COLORS[colorIndex % MOUNTAIN_COLORS.length];
+  const y = scale * height * 0.5;
+
+  return (
+    <group position={[x, y, z]} scale={scale}>
+      <mesh castShadow receiveShadow>
+        <StaticMountainGeometry seed={seed} radius={radius} height={height} />
+        <meshStandardMaterial color={color} roughness={0.85} flatShading />
+      </mesh>
+      {hasSnow && (
+        <mesh position={[0, height * 0.4, 0]} castShadow>
+          <coneGeometry args={[radius * 0.35, height * 0.2, 5]} />
+          <meshStandardMaterial color={SNOW_COLOR} roughness={0.6} flatShading />
+        </mesh>
+      )}
+    </group>
+  );
+}
 
 function SeaFloor() {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -49,7 +92,7 @@ function SeaFloor() {
   useEffect(() => {
     if (!meshRef.current) return;
     const geo = meshRef.current.geometry as THREE.PlaneGeometry;
-    const positions = geo.attributes.position;
+    const positions = geo.attributes.position! as THREE.BufferAttribute;
     for (let i = 0; i < positions.count; i++) {
       const x = positions.getX(i);
       const y = positions.getY(i);
@@ -222,17 +265,18 @@ function SeafloorVegetation() {
 
 interface CoralProps {
   position: [number, number, number];
-  color: string;
+  color?: string;
   type: "brain" | "branch" | "fan";
 }
 
 function Coral({ position, color, type }: CoralProps) {
+  const fillColor = color ?? '#ff6b6b';
   return (
     <group position={position}>
       {type === "brain" && (
         <mesh castShadow>
           <sphereGeometry args={[0.4, 16, 16]} />
-          <meshStandardMaterial color={color} roughness={0.8} />
+          <meshStandardMaterial color={fillColor} roughness={0.8} />
         </mesh>
       )}
       {type === "branch" && (
@@ -240,7 +284,7 @@ function Coral({ position, color, type }: CoralProps) {
           {[0, 60, 120, 180, 240, 300].map((angle, i) => (
             <mesh key={i} position={[0, i * 0.15, 0]} rotation={[0, 0, (angle * Math.PI) / 180]} castShadow>
               <cylinderGeometry args={[0.02, 0.08, 0.3, 6]} />
-              <meshStandardMaterial color={color} roughness={0.7} />
+              <meshStandardMaterial color={fillColor} roughness={0.7} />
             </mesh>
           ))}
         </group>
@@ -248,7 +292,7 @@ function Coral({ position, color, type }: CoralProps) {
       {type === "fan" && (
         <mesh castShadow rotation={[0.3, 0, 0]}>
           <circleGeometry args={[0.5, 16]} />
-          <meshStandardMaterial color={color} roughness={0.5} side={THREE.DoubleSide} />
+          <meshStandardMaterial color={fillColor} roughness={0.5} side={THREE.DoubleSide} />
         </mesh>
       )}
     </group>
@@ -257,7 +301,7 @@ function Coral({ position, color, type }: CoralProps) {
 
 function CoralReef() {
   const corals = useMemo(() => {
-    const coralData = [];
+    const coralData: CoralProps[] = [];
     const colors = ["#ff6b6b", "#ffa07a", "#ff8c69", "#e066ff", "#ff69b4", "#ffa500"];
     for (let i = 0; i < 20; i++) {
       const type = ["brain", "branch", "fan"][Math.floor(Math.random() * 3)] as "brain" | "branch" | "fan";
@@ -272,7 +316,7 @@ function CoralReef() {
   return (
     <group>
       {corals.map((coral, i) => (
-        <Coral key={i} {...coral} />
+        <Coral key={i} type={coral.type} color={coral.color ?? '#ff6b6b'} position={coral.position} />
       ))}
     </group>
   );
@@ -295,18 +339,22 @@ function PlanktonParticles() {
   useFrame((state) => {
     if (!particlesRef.current) return;
     const time = state.clock.elapsedTime;
-    const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
+    const posAttr = particlesRef.current.geometry.attributes.position as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+    const arr = posAttr.array as unknown;
+    if (!(arr instanceof Float32Array)) return;
     for (let i = 0; i < count; i++) {
-      positions[i * 3 + 1] += Math.sin(time * 0.2 + i * 0.01) * 0.002;
-      positions[i * 3] += Math.sin(time * 0.1 + i * 0.02) * 0.001;
+      const idx = i * 3;
+      arr[idx + 1] = (arr[idx + 1] ?? 0) + Math.sin(time * 0.2 + i * 0.01) * 0.002;
+      arr[idx] = (arr[idx] ?? 0) + Math.sin(time * 0.1 + i * 0.02) * 0.001;
     }
-    particlesRef.current.geometry.attributes.position.needsUpdate = true;
+    posAttr.needsUpdate = true;
   });
 
   return (
     <points ref={particlesRef}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
       <pointsMaterial size={0.05} color="#4a9fff" transparent opacity={0.6} sizeAttenuation />
     </points>
@@ -330,18 +378,23 @@ function BioluminescentParticles() {
   useFrame((state) => {
     if (!particlesRef.current) return;
     const time = state.clock.elapsedTime;
-    const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
+    const posAttr = particlesRef.current.geometry.attributes.position as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+    const arr = posAttr.array as unknown;
+    if (!(arr instanceof Float32Array)) return;
     for (let i = 0; i < count; i++) {
-      positions[i * 3 + 1] += Math.sin(time * 0.5 + i * 0.05) * 0.003;
-      if (positions[i * 3 + 1] > -1) positions[i * 3 + 1] = SEA_FLOOR_Y + 0.5;
+      const idx = i * 3;
+      const newVal = (arr[idx + 1] ?? 0) + Math.sin(time * 0.5 + i * 0.05) * 0.003;
+      arr[idx + 1] = newVal;
+      if (newVal > -1) arr[idx + 1] = SEA_FLOOR_Y + 0.5;
     }
-    particlesRef.current.geometry.attributes.position.needsUpdate = true;
+    posAttr.needsUpdate = true;
   });
 
   return (
     <points ref={particlesRef}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
       <pointsMaterial size={0.08} color="#00ffcc" transparent opacity={0.8} sizeAttenuation />
     </points>
@@ -395,7 +448,7 @@ function FishSchool() {
 
 function Islands() {
   const islands = useMemo(() => {
-    const data = [];
+    const data: { x: number; z: number; scale: number }[] = [];
     const positions = [
       { x: 22, z: 15 },
       { x: -18, z: 20 },
@@ -407,9 +460,10 @@ function Islands() {
       { x: -25, z: 0 },
     ];
     for (let i = 0; i < positions.length; i++) {
+      const p = positions[i]!;
       data.push({
-        x: positions[i].x + (Math.random() - 0.5) * 3,
-        z: positions[i].z + (Math.random() - 0.5) * 3,
+        x: p.x + (Math.random() - 0.5) * 3,
+        z: p.z + (Math.random() - 0.5) * 3,
         scale: 1 + Math.random() * 2,
       });
     }
@@ -447,7 +501,10 @@ function MountainRing() {
       const z = Math.sin(angle) * distance;
       const height = 8 + Math.random() * 18;
       const width = 6 + Math.random() * 10;
-      mtnData.push({ x, z, height, width, angle: angle + Math.PI });
+      const snowLine = 0.55 + Math.random() * 0.25;
+      const colorVariation = Math.random();
+      const baseColor = colorVariation < 0.3 ? "#4a5c3a" : colorVariation < 0.6 ? "#3d5033" : "#525f3f";
+      mtnData.push({ x, z, height, width, angle: angle + Math.PI, snowLine, baseColor });
     }
     return mtnData;
   }, []);
@@ -455,10 +512,16 @@ function MountainRing() {
   return (
     <group>
       {mountains.map((mtn, i) => (
-        <mesh key={i} position={[mtn.x, mtn.height / 2 - 5, mtn.z]} rotation={[0, mtn.angle, 0]} receiveShadow castShadow>
-          <coneGeometry args={[mtn.width, mtn.height, 6]} />
-          <meshStandardMaterial color="#228B22" roughness={0.9} metalness={0.0} />
-        </mesh>
+        <group key={i} position={[mtn.x, 0, mtn.z]} rotation={[0, mtn.angle, 0]}>
+          <mesh position={[0, mtn.height / 2 - 5, 0]} receiveShadow castShadow>
+            <coneGeometry args={[mtn.width, mtn.height, 8]} />
+            <meshStandardMaterial color={mtn.baseColor} roughness={0.9} metalness={0.0} flatShading />
+          </mesh>
+          <mesh position={[0, mtn.height * mtn.snowLine - 5, 0]} receiveShadow>
+            <coneGeometry args={[mtn.width * 0.35, mtn.height * (1 - mtn.snowLine) * 1.2, 6]} />
+            <meshStandardMaterial color="#e8e8e8" roughness={0.7} metalness={0.1} flatShading />
+          </mesh>
+        </group>
       ))}
     </group>
   );
@@ -474,7 +537,10 @@ function DistantMountains() {
       const z = Math.sin(angle) * distance;
       const height = 15 + Math.random() * 25;
       const width = 8 + Math.random() * 15;
-      data.push({ x, z, height, width, angle: angle + Math.PI });
+      const snowLine = 0.5 + Math.random() * 0.3;
+      const colorVariation = Math.random();
+      const baseColor = colorVariation < 0.3 ? "#3a4a2a" : colorVariation < 0.6 ? "#2d4033" : "#35452f";
+      data.push({ x, z, height, width, angle: angle + Math.PI, snowLine, baseColor });
     }
     return data;
   }, []);
@@ -482,10 +548,16 @@ function DistantMountains() {
   return (
     <group>
       {peaks.map((peak, i) => (
-        <mesh key={i} position={[peak.x, peak.height / 2 - 3, peak.z]} rotation={[0, peak.angle, 0]}>
-          <coneGeometry args={[peak.width, peak.height, 5]} />
-          <meshStandardMaterial color="#1E7B1E" roughness={0.9} />
-        </mesh>
+        <group key={i} position={[peak.x, 0, peak.z]} rotation={[0, peak.angle, 0]}>
+          <mesh position={[0, peak.height / 2 - 3, 0]}>
+            <coneGeometry args={[peak.width, peak.height, 7]} />
+            <meshStandardMaterial color={peak.baseColor} roughness={0.9} flatShading />
+          </mesh>
+          <mesh position={[0, peak.height * peak.snowLine - 3, 0]}>
+            <coneGeometry args={[peak.width * 0.3, peak.height * (1 - peak.snowLine) * 1.1, 5]} />
+            <meshStandardMaterial color="#d8d8d8" roughness={0.7} flatShading />
+          </mesh>
+        </group>
       ))}
     </group>
   );
@@ -511,7 +583,7 @@ function Stars({ visible }: { visible: boolean }) {
   return (
     <points ref={starsRef}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
       <pointsMaterial size={0.4} color="#ffffff" transparent opacity={visible ? 1.0 : 0} sizeAttenuation />
     </points>
@@ -557,29 +629,122 @@ function Sun({ visible, timeOfDay }: { visible: boolean; timeOfDay: number }) {
   );
 }
 
-function Sky({ timeOfDay }: { timeOfDay: number }) {
-  const isDay = timeOfDay > 6 && timeOfDay < 18;
-  const isSunrise = (timeOfDay >= 5 && timeOfDay <= 7) || (timeOfDay >= 17 && timeOfDay <= 19);
-  const isSunset = timeOfDay >= 17 && timeOfDay <= 19;
-  const isNight = timeOfDay < 5 || timeOfDay > 19;
-
-  const skyColor = "#87CEEB";
+function CloudLayer({ position, scale }: { position: [number, number, number]; scale: number }) {
+  const groupRef = useRef<THREE.Group>(null);
+  
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.position.x += 0.008;
+      if (groupRef.current.position.x > 80) {
+        groupRef.current.position.x = -80;
+      }
+    }
+  });
 
   return (
-    <mesh position={[0, 30, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-      <sphereGeometry args={[100, 32, 32]} />
-      <meshBasicMaterial color="#87CEEB" side={THREE.BackSide} />
-    </mesh>
+    <group ref={groupRef} position={position}>
+      {Array.from({ length: 8 }).map((_, i) => {
+        const cloudScale = scale * (0.5 + Math.random() * 0.8);
+        return (
+          <mesh key={i} position={[
+            (Math.random() - 0.5) * scale * 4,
+            (Math.random() - 0.5) * scale * 0.5,
+            (Math.random() - 0.5) * scale * 2
+          ]}>
+            <sphereGeometry args={[cloudScale, 8, 8]} />
+            <meshStandardMaterial 
+              color="#ffffff" 
+              transparent 
+              opacity={0.85} 
+              roughness={1}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+function Sky({ timeOfDay }: { timeOfDay: number }) {
+  const isNight = timeOfDay < 5 || timeOfDay > 19;
+  const isSunrise = (timeOfDay >= 5 && timeOfDay <= 7) || (timeOfDay >= 17 && timeOfDay <= 19);
+  const isDay = timeOfDay > 6 && timeOfDay < 18;
+  const sunriseFactor = isSunrise ? (timeOfDay < 7 ? (timeOfDay - 5) / 2 : (19 - timeOfDay) / 2) : 0;
+
+  const nightColor = new THREE.Color("#0a0a1a");
+  const dawnColor = new THREE.Color("#ff7040");
+  const dayColor = new THREE.Color("#4a90d9");
+  const duskColor = new THREE.Color("#ff6040");
+
+  const skyColor = useMemo(() => {
+    if (isNight) return nightColor;
+    if (isSunrise) {
+      const c = new THREE.Color();
+      if (timeOfDay < 12) {
+        c.lerpColors(nightColor, dawnColor, sunriseFactor);
+      } else {
+        c.lerpColors(nightColor, duskColor, sunriseFactor);
+      }
+      return c;
+    }
+    return dayColor;
+  }, [timeOfDay, isNight, isSunrise, sunriseFactor]);
+
+  const horizonColor = useMemo(() => {
+    if (isNight) return new THREE.Color("#1a1a2a");
+    if (isSunrise) {
+      return new THREE.Color("#ff9060");
+    }
+    return new THREE.Color("#87ceee");
+  }, [timeOfDay, isNight, isSunrise]);
+
+  return (
+    <group>
+      <mesh position={[0, 0, 0]}>
+        <sphereGeometry args={[100, 64, 64]} />
+        <meshBasicMaterial color={skyColor} side={THREE.BackSide} />
+      </mesh>
+      <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.3, 1.3, 64]} />
+        <meshBasicMaterial color={horizonColor} side={THREE.DoubleSide} transparent opacity={0.4} />
+      </mesh>
+      <CloudLayer position={[25, 20, -15]} scale={3} />
+      <CloudLayer position={[-30, 22, 10]} scale={4} />
+      <CloudLayer position={[10, 18, 20]} scale={2.5} />
+      <CloudLayer position={[-15, 25, -25]} scale={3.5} />
+    </group>
   );
 }
 
 function AtmosphericConditions({ timeOfDay }: { timeOfDay: number }) {
+  const isNight = timeOfDay < 5 || timeOfDay > 19;
+  const isSunrise = (timeOfDay >= 5 && timeOfDay <= 7) || (timeOfDay >= 17 && timeOfDay <= 19);
+  const isDay = timeOfDay > 6 && timeOfDay < 18;
+
+  const lightColor = useMemo(() => {
+    if (isNight) return "#4444aa";
+    if (isSunrise) return "#ffaa70";
+    return "#fff5e0";
+  }, [timeOfDay, isNight, isSunrise]);
+
+  const ambientColor = useMemo(() => {
+    if (isNight) return "#111133";
+    if (isSunrise) return "#ff8866";
+    return "#87CEEB";
+  }, [timeOfDay, isNight, isSunrise]);
+
+  const hemisphereColor = useMemo(() => {
+    if (isNight) return ["#0a0a2a", "#050510"];
+    if (isSunrise) return ["#ff6040", "#402010"];
+    return ["#87CEEB", "#444444"];
+  }, [timeOfDay, isNight, isSunrise]);
+
   return (
     <>
       <directionalLight
         position={[50, 80, 30]}
-        intensity={1.5}
-        color="#fff5e0"
+        intensity={isNight ? 0.1 : isSunrise ? 0.8 : 1.5}
+        color={lightColor}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-30}
@@ -587,8 +752,8 @@ function AtmosphericConditions({ timeOfDay }: { timeOfDay: number }) {
         shadow-camera-top={30}
         shadow-camera-bottom={-30}
       />
-      <hemisphereLight args={["#87CEEB", "#444444", 0.8]} />
-      <ambientLight intensity={0.3} color="#ffffff" />
+      <hemisphereLight args={[hemisphereColor[0], hemisphereColor[1], isNight ? 0.2 : 0.8]} />
+      <ambientLight intensity={isNight ? 0.1 : 0.3} color={ambientColor} />
     </>
   );
 }
@@ -614,9 +779,10 @@ function Scene({
       <Moon visible={false} timeOfDay={timeOfDay} />
       <Sun visible={true} timeOfDay={12} />
 
-      <MountainRing />
-      <Islands />
+      {/* use the existing components defined below */}
+      <RockFormations />
       <DistantMountains />
+      <Islands />
 
       <pointLight position={[0, -2, 0]} color="#0a5a7a" intensity={0.8} distance={20} />
       <pointLight position={[0, -4, 0]} color="#0a3a5a" intensity={0.5} distance={25} />
