@@ -1,20 +1,19 @@
 "use client";
 
 import { Suspense, useEffect, useState, useMemo, useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import {
   OrbitControls,
   PerspectiveCamera,
 } from "@react-three/drei";
 import * as THREE from "three";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { Ocean } from "./ocean";
 import { AnomalyMarkers } from "./anomaly-markers";
 
 const BLACK_SEA_DEPTH = 8;
 const SEA_FLOOR_Y = -BLACK_SEA_DEPTH;
 
-const MOUNTAIN_COLORS = ["#3d5033", "#2d3a2a", "#354530", "#283328"];
-const SNOW_COLOR = "#e0e0e0";
 
 // Add minimal type definitions used in this file
 interface SensorData {
@@ -37,46 +36,6 @@ interface WaterSceneProps {
   timeOfDay?: number;
 }
 
-function StaticMountainGeometry({ seed, radius, height }: { seed: number; radius: number; height: number }) {
-  const geo = useMemo(() => {
-    const g = new THREE.ConeGeometry(radius, height, 8, 5);
-    const pos = g.attributes.position! as THREE.BufferAttribute;
-    for (let i = 0; i < pos.count; i++) {
-      const y = pos.getY(i);
-      if (y > height * 0.1) {
-        const angle = Math.atan2(pos.getZ(i), pos.getX(i));
-        const noise = (Math.sin(seed * i * 0.5) * 0.5) * radius * 0.25;
-        pos.setX(i, pos.getX(i) + Math.cos(angle) * noise);
-        pos.setZ(i, pos.getZ(i) + Math.sin(angle) * noise);
-      }
-    }
-    g.computeVertexNormals();
-    return g;
-  }, [seed, radius, height]);
-
-  return <primitive object={geo} attach="geometry" />;
-}
-
-function NearMountain({ seed, x, z, scale, height, radius, hasSnow }: { seed: number; x: number; z: number; scale: number; height: number; radius: number; hasSnow: boolean }) {
-  const colorIndex = Math.abs(Math.sin(seed * 777)) * MOUNTAIN_COLORS.length >> 0;
-  const color = MOUNTAIN_COLORS[colorIndex % MOUNTAIN_COLORS.length];
-  const y = scale * height * 0.5;
-
-  return (
-    <group position={[x, y, z]} scale={scale}>
-      <mesh castShadow receiveShadow>
-        <StaticMountainGeometry seed={seed} radius={radius} height={height} />
-        <meshStandardMaterial color={color} roughness={0.85} flatShading />
-      </mesh>
-      {hasSnow && (
-        <mesh position={[0, height * 0.4, 0]} castShadow>
-          <coneGeometry args={[radius * 0.35, height * 0.2, 5]} />
-          <meshStandardMaterial color={SNOW_COLOR} roughness={0.6} flatShading />
-        </mesh>
-      )}
-    </group>
-  );
-}
 
 function SeaFloor() {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -490,76 +449,36 @@ function Islands() {
   );
 }
 
-function MountainRing() {
-  const mountains = useMemo(() => {
-    const mtnData = [];
-    const count = 24;
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2;
-      const distance = 35 + Math.random() * 15;
-      const x = Math.cos(angle) * distance;
-      const z = Math.sin(angle) * distance;
-      const height = 8 + Math.random() * 18;
-      const width = 6 + Math.random() * 10;
-      const snowLine = 0.55 + Math.random() * 0.25;
-      const colorVariation = Math.random();
-      const baseColor = colorVariation < 0.3 ? "#4a5c3a" : colorVariation < 0.6 ? "#3d5033" : "#525f3f";
-      mtnData.push({ x, z, height, width, angle: angle + Math.PI, snowLine, baseColor });
-    }
-    return mtnData;
-  }, []);
+// Mountain backdrop using obj_1.obj.
+// The model is sunk to Y=-10 so only ridges above world Y=0 (sea level) are visible.
+// A clipping plane at Y=0 cuts everything below sea — only the peaks poke above the horizon.
+// XZ scale 2.5 pushes those peaks to ±67 units, keeping them clearly in the background.
+const SEA_LEVEL_CLIP = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+function MountainBackdrop() {
+  const obj = useLoader(OBJLoader, "/models/mountains/obj_1.obj");
+
+  useEffect(() => {
+    obj.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: "#5a6b50",
+          roughness: 0.92,
+          metalness: 0.0,
+          clippingPlanes: [SEA_LEVEL_CLIP],
+        });
+        mesh.receiveShadow = true;
+      }
+    });
+  }, [obj]);
 
   return (
-    <group>
-      {mountains.map((mtn, i) => (
-        <group key={i} position={[mtn.x, 0, mtn.z]} rotation={[0, mtn.angle, 0]}>
-          <mesh position={[0, mtn.height / 2 - 5, 0]} receiveShadow castShadow>
-            <coneGeometry args={[mtn.width, mtn.height, 8]} />
-            <meshStandardMaterial color={mtn.baseColor} roughness={0.9} metalness={0.0} flatShading />
-          </mesh>
-          <mesh position={[0, mtn.height * mtn.snowLine - 5, 0]} receiveShadow>
-            <coneGeometry args={[mtn.width * 0.35, mtn.height * (1 - mtn.snowLine) * 1.2, 6]} />
-            <meshStandardMaterial color="#e8e8e8" roughness={0.7} metalness={0.1} flatShading />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  );
-}
-
-function DistantMountains() {
-  const peaks = useMemo(() => {
-    const data = [];
-    for (let i = 0; i < 40; i++) {
-      const angle = (i / 40) * Math.PI * 2;
-      const distance = 55 + Math.random() * 20;
-      const x = Math.cos(angle) * distance;
-      const z = Math.sin(angle) * distance;
-      const height = 15 + Math.random() * 25;
-      const width = 8 + Math.random() * 15;
-      const snowLine = 0.5 + Math.random() * 0.3;
-      const colorVariation = Math.random();
-      const baseColor = colorVariation < 0.3 ? "#3a4a2a" : colorVariation < 0.6 ? "#2d4033" : "#35452f";
-      data.push({ x, z, height, width, angle: angle + Math.PI, snowLine, baseColor });
-    }
-    return data;
-  }, []);
-
-  return (
-    <group>
-      {peaks.map((peak, i) => (
-        <group key={i} position={[peak.x, 0, peak.z]} rotation={[0, peak.angle, 0]}>
-          <mesh position={[0, peak.height / 2 - 3, 0]}>
-            <coneGeometry args={[peak.width, peak.height, 7]} />
-            <meshStandardMaterial color={peak.baseColor} roughness={0.9} flatShading />
-          </mesh>
-          <mesh position={[0, peak.height * peak.snowLine - 3, 0]}>
-            <coneGeometry args={[peak.width * 0.3, peak.height * (1 - peak.snowLine) * 1.1, 5]} />
-            <meshStandardMaterial color="#d8d8d8" roughness={0.7} flatShading />
-          </mesh>
-        </group>
-      ))}
-    </group>
+    <primitive
+      object={obj}
+      position={[0, -10, 0]}
+      scale={[2.5, 1.5, 2.5]}
+    />
   );
 }
 
@@ -768,10 +687,12 @@ function Scene({
   timeOfDay: number;
 }) {
   const isNight = timeOfDay < 5 || timeOfDay > 19;
-  const isDay = timeOfDay > 6 && timeOfDay < 18;
+  // Fog fades distant mountains into the sky — near edge at 55 units, fully opaque at 130 units
+  const fogColor = isNight ? "#0a0a1a" : (timeOfDay >= 5 && timeOfDay <= 7) || (timeOfDay >= 17 && timeOfDay <= 19) ? "#c07050" : "#87ceeb";
 
   return (
     <>
+      <fog attach="fog" args={[fogColor, 55, 130]} />
       <AtmosphericConditions timeOfDay={timeOfDay} />
 
       <Sky timeOfDay={timeOfDay} />
@@ -779,9 +700,11 @@ function Scene({
       <Moon visible={false} timeOfDay={timeOfDay} />
       <Sun visible={true} timeOfDay={12} />
 
+      <Suspense fallback={null}>
+        <MountainBackdrop />
+      </Suspense>
       {/* use the existing components defined below */}
       <RockFormations />
-      <DistantMountains />
       <Islands />
 
       <pointLight position={[0, -2, 0]} color="#0a5a7a" intensity={0.8} distance={20} />
@@ -867,6 +790,7 @@ function WaterSceneCanvas({
             antialias: true,
             alpha: false,
             powerPreference: "high-performance",
+            localClippingEnabled: true,
           }}
           dpr={[1, 2]}
           camera={{ position: [0, 3, 12], fov: 60 }}
