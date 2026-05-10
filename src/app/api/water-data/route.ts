@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "~/lib/supabase";
+import { db } from "~/server/db";
+import { waterReadingsTable } from "~/server/db/schema";
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +12,7 @@ export async function POST(request: NextRequest) {
       turbidity,
       dissolved_oxygen,
       water_level,
+      sensor_id,
     } = body;
 
     if (
@@ -22,38 +24,32 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("water_readings")
-      .insert([
-        {
-          temperature,
-          ph,
-          turbidity,
-          dissolved_oxygen,
-          water_level,
-        },
-      ])
-      .select();
-
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
-      );
-    }
+    const result = await db
+      .insert(waterReadingsTable)
+      .values({
+        temperature: String(temperature),
+        ph: String(ph),
+        turbidity: String(turbidity),
+        dissolved_oxygen: String(dissolved_oxygen),
+        water_level: String(water_level),
+        sensor_id: sensor_id || null,
+      })
+      .returning();
 
     return NextResponse.json({
       success: true,
-      data,
+      data: result[0],
     });
-  } catch (err) {
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { success: false, error: String(err) },
-      { status: 500 }
+      { success: false, error: errorMessage },
+      { status: 500 },
     );
   }
 }
