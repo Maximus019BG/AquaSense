@@ -1,183 +1,162 @@
 "use client";
 
-import { useState } from "react";
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Area,
-  AreaChart,
-} from "recharts";
+import { useState, useMemo } from "react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { cn } from "~/lib/utils";
 
-const timeRanges = ["1H", "6H", "24H", "7D"] as const;
+type TimeRange = "1H" | "6H" | "24H" | "7D";
+const TIME_RANGES: TimeRange[] = ["1H", "6H", "24H", "7D"];
 
-type TimeRange = (typeof timeRanges)[number];
-
-// Mock data generator
-function generateData(points: number, min: number, max: number) {
-  return Array.from({ length: points }, (_, i) => ({
-    time: `${i}:00`,
-    value: min + Math.random() * (max - min),
-  }));
-}
-
-const chartConfigs = [
-  {
-    id: "temperature",
-    title: "Temperature",
-    color: "#FF6B6B",
-    unit: "°C",
-    min: 20,
-    max: 30,
-  },
-  {
-    id: "ph",
-    title: "pH Level",
-    color: "#4ECDC4",
-    unit: "",
-    min: 6,
-    max: 9,
-  },
-  {
-    id: "turbidity",
-    title: "Turbidity",
-    color: "#FFE66D",
-    unit: "NTU",
-    min: 0,
-    max: 50,
-  },
-  {
-    id: "oxygen",
-    title: "Dissolved O2",
-    color: "#95E1D3",
-    unit: "mg/L",
-    min: 5,
-    max: 12,
-  },
-  {
-    id: "level",
-    title: "Water Level",
-    color: "#6C5CE7",
-    unit: "cm",
-    min: 200,
-    max: 300,
-  },
+const PARAMS = [
+  { id: "temperature", label: "Temp",    color: "#FF6B6B", unit: "°C",   min: 20,  max: 30  },
+  { id: "ph",          label: "pH",      color: "#4ECDC4", unit: "",     min: 6,   max: 9   },
+  { id: "turbidity",   label: "Turb",    color: "#FFE66D", unit: "NTU",  min: 0,   max: 50  },
+  { id: "oxygen",      label: "O₂",      color: "#95E1D3", unit: "mg/L", min: 5,   max: 12  },
+  { id: "level",       label: "Level",   color: "#6C5CE7", unit: "cm",   min: 200, max: 300 },
+  { id: "humidity",    label: "Humidity", color: "#06b6d4", unit: "%",   min: 30,  max: 95  },
 ];
 
-function MiniChart({
-  config,
-  data,
-}: {
-  config: (typeof chartConfigs)[0];
-  data: { time: string; value: number }[];
-}) {
-  return (
-    <div className="p-4 bg-[#132F4C] border border-[#334155] rounded-xl">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="text-sm font-medium text-gray-300">{config.title}</h4>
-        <span className="text-xs text-gray-500">{config.unit}</span>
-      </div>
+const PT_COUNTS: Record<TimeRange, number> = { "1H": 12, "6H": 24, "24H": 48, "7D": 84 };
 
-      <div className="h-32">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data}>
-            <defs>
-              <linearGradient
-                id={`gradient-${config.id}`}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="5%"
-                  stopColor={config.color}
-                  stopOpacity={0.3}
-                />
-                <stop
-                  offset="95%"
-                  stopColor={config.color}
-                  stopOpacity={0}
-                />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="#334155"
-              opacity={0.5}
-            />
-            <XAxis dataKey="time" hide />
-            <YAxis domain={[config.min, config.max]} hide />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#132F4C",
-                border: "1px solid #334155",
-                borderRadius: "8px",
-              }}
-              labelStyle={{ color: "#94A3B8" }}
-              itemStyle={{ color: config.color }}
-            />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke={config.color}
-              strokeWidth={2}
-              fill={`url(#gradient-${config.id})`}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
+function deterministicData(points: number, min: number, max: number, seed: number) {
+  return Array.from({ length: points }, (_, i) => {
+    const t = i / points;
+    const v = min + (max - min) * (
+      0.5
+      + 0.25 * Math.sin(i * 0.6 + seed)
+      + 0.12 * Math.cos(i * 1.3 + seed * 2.1)
+      + 0.08 * Math.sin(i * 2.5 + seed * 0.7)
+    );
+    const label = points <= 12 ? `${i * 5}m` : points <= 24 ? `${i}h` : points <= 48 ? `${Math.floor(i / 2)}h` : `D${Math.floor(i / 12) + 1}`;
+    return { time: label, value: +Math.max(min, Math.min(max, v)).toFixed(2) };
+  });
+}
+
+// Mini inline sparkline (pure SVG, no recharts)
+function MiniSparkline({ data, color }: { data: { value: number }[]; color: string }) {
+  const vals = data.map(d => d.value);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const span = hi - lo || 1;
+  const W = 40, H = 18;
+  const pts = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W;
+    const y = H - ((v - lo) / span) * H;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return (
+    <svg width={W} height={H} className="overflow-visible">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
   );
 }
 
 export function ChartSection() {
   const [activeRange, setActiveRange] = useState<TimeRange>("24H");
+  const [activeId, setActiveId] = useState("temperature");
 
-  const dataPoints =
-    activeRange === "1H"
-      ? 12
-      : activeRange === "6H"
-        ? 24
-        : activeRange === "24H"
-          ? 48
-          : 84;
+  const active = PARAMS.find(p => p.id === activeId) ?? PARAMS[0]!;
+  const pts = PT_COUNTS[activeRange];
+
+  const mainData = useMemo(
+    () => deterministicData(pts, active.min, active.max, active.id.charCodeAt(0) * 0.13),
+    [pts, activeId]
+  );
+
+  const overviewData = useMemo(
+    () => PARAMS.map(p => ({ ...p, data: deterministicData(16, p.min, p.max, p.id.charCodeAt(0) * 0.13) })),
+    []
+  );
+
+  const lastVal = mainData[mainData.length - 1]?.value ?? 0;
 
   return (
-    <div className="p-6 bg-[#132F4C] border border-[#334155] rounded-xl">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white">Live Charts</h3>
-
-        <div className="flex gap-1">
-          {timeRanges.map((range) => (
+    <div className="p-5 rounded-xl border border-[#1e3a5f] bg-[#091a2e]">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-1 flex-wrap">
+          {PARAMS.map(p => (
             <button
-              key={range}
-              onClick={() => setActiveRange(range)}
-              className={cn(
-                "px-3 py-1 text-xs rounded transition-colors",
-                activeRange === range
-                  ? "bg-[#00BCD4]/20 text-[#00BCD4]"
-                  : "text-gray-400 hover:text-white hover:bg-white/5"
-              )}
+              key={p.id}
+              onClick={() => setActiveId(p.id)}
+              className="px-2.5 py-1 text-[10px] font-bold tracking-wider rounded-md transition-all duration-150"
+              style={
+                activeId === p.id
+                  ? { backgroundColor: `${p.color}20`, color: p.color, border: `1px solid ${p.color}40`, boxShadow: `0 0 8px ${p.color}20` }
+                  : { color: "#475569", border: "1px solid transparent" }
+              }
             >
-              {range}
+              {p.label}
             </button>
+          ))}
+        </div>
+        <div className="flex gap-1 ml-2">
+          {TIME_RANGES.map(r => (
+            <button
+              key={r}
+              onClick={() => setActiveRange(r)}
+              className={cn(
+                "px-2 py-1 text-[9px] font-bold tracking-wider rounded transition-all",
+                activeRange === r ? "bg-[#1e3a5f] text-white" : "text-gray-600 hover:text-gray-400"
+              )}
+            >{r}</button>
           ))}
         </div>
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-5 gap-4">
-        {chartConfigs.map((config) => (
-          <MiniChart
-            key={config.id}
-            config={config}
-            data={generateData(dataPoints, config.min, config.max)}
-          />
+      {/* Featured chart */}
+      <div className="mb-1">
+        <div className="flex items-baseline gap-2 mb-2">
+          <h3 className="text-[10px] font-bold tracking-[0.15em] text-gray-400 uppercase">{active.label}</h3>
+          <span className="text-xl font-bold font-mono text-white" style={{ textShadow: `0 0 12px ${active.color}40` }}>
+            {lastVal.toFixed(active.unit === "" ? 2 : 1)}
+          </span>
+          <span className="text-xs text-gray-500 font-mono">{active.unit}</span>
+        </div>
+
+        <div className="h-44">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={mainData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="cGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={active.color} stopOpacity={0.22} />
+                  <stop offset="95%" stopColor={active.color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="2 6" stroke="#1e3a5f" vertical={false} />
+              <XAxis dataKey="time" tick={{ fill: "#2d4a6a", fontSize: 8 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis domain={[active.min, active.max]} tick={{ fill: "#2d4a6a", fontSize: 8 }} tickLine={false} axisLine={false} width={32} />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#0d2137", border: `1px solid ${active.color}30`, borderRadius: "8px", fontSize: "11px", padding: "6px 10px" }}
+                labelStyle={{ color: "#64748b", marginBottom: "2px" }}
+                itemStyle={{ color: active.color }}
+                cursor={{ stroke: active.color, strokeWidth: 1, strokeDasharray: "3 3" }}
+              />
+              <Area type="monotone" dataKey="value" stroke={active.color} strokeWidth={2}
+                fill="url(#cGrad)"
+                dot={false}
+                activeDot={{ r: 4, fill: active.color, stroke: "#091a2e", strokeWidth: 2 }}
+                style={{ filter: `drop-shadow(0 0 3px ${active.color}50)` }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Overview sparkline chips */}
+      <div className="grid grid-cols-6 gap-1.5 pt-3 border-t border-[#1e3a5f]">
+        {overviewData.map(p => (
+          <button
+            key={p.id}
+            onClick={() => setActiveId(p.id)}
+            className="p-2 rounded-lg transition-all duration-150 text-left"
+            style={{
+              background: activeId === p.id ? `${p.color}12` : "#0d2137",
+              border: `1px solid ${activeId === p.id ? p.color + "35" : "#1e3a5f"}`,
+            }}
+          >
+            <p className="text-[8px] text-gray-600 font-mono uppercase mb-1">{p.label}</p>
+            <MiniSparkline data={p.data} color={p.color} />
+          </button>
         ))}
       </div>
     </div>

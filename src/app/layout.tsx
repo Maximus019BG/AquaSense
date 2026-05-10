@@ -2,7 +2,6 @@ import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "~/styles/globals.css";
 import { TRPCReactProvider } from "~/trpc/react";
 import { Header } from "~/components/layout/header";
-import { Sidebar } from "~/components/layout/sidebar";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const jetbrains = JetBrains_Mono({
@@ -33,10 +32,7 @@ export default function RootLayout({
         <TRPCReactProvider>
           <div className="min-h-screen bg-[#0A1929] text-white">
             <Header />
-            <div className="flex">
-              <Sidebar />
-              <main className="flex-1 p-6">{children}</main>
-            </div>
+            <main className="p-6">{children}</main>
           </div>
         </TRPCReactProvider>
       </body>
