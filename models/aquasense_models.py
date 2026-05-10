@@ -40,7 +40,9 @@ class ModelLoader:
                       Defaults to the directory where this file is located.
         """
         if model_dir is None:
-            model_dir = Path(__file__).parent
+            package_dir = Path(__file__).parent
+            artifacts_dir = package_dir / 'artifacts'
+            model_dir = artifacts_dir if artifacts_dir.exists() else package_dir
         
         self.model_dir = Path(model_dir)
         self._isolation_forest = None

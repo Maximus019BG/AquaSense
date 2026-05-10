@@ -201,11 +201,11 @@ warnings.filterwarnings('ignore', category=UserWarning)
 To retrain these models, run the Jupyter notebook:
 
 ```bash
-cd model/
+cd training/notebooks/
 jupyter notebook 01_anomaly_detection_training.ipynb
 ```
 
-This will regenerate all `.pkl` files in the `model/outputs/` directory.
+This will regenerate output artifacts in the `training/outputs/` directory.
 
 ## File Structure
 
@@ -213,10 +213,11 @@ This will regenerate all `.pkl` files in the `model/outputs/` directory.
 models/
 ├── __init__.py                  # Package initialization
 ├── aquasense_models.py          # Model loading module
-├── isolation_forest.pkl         # Anomaly detection model (joblib)
-├── scaler.pkl                   # Feature scaler (joblib)
-├── imputer.joblib               # Missing value imputer (joblib)
-├── feature_names.json           # Feature metadata
+├── artifacts/
+│   ├── isolation_forest.pkl     # Anomaly detection model (joblib)
+│   ├── scaler.pkl               # Feature scaler (joblib)
+│   ├── imputer.joblib           # Missing value imputer (joblib)
+│   └── feature_names.json       # Feature metadata
 └── README.md                    # This file
 ```
 

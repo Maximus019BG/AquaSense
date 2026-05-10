@@ -187,7 +187,7 @@ def example_5_direct_joblib_usage():
     
     import joblib
     
-    model_dir = Path(__file__).parent
+    model_dir = Path(__file__).parent / 'artifacts'
     
     print(f"\nLoading models from: {model_dir}")
     
@@ -234,7 +234,7 @@ def example_6_model_information():
         print(f"  {i}. {feature}")
     
     # Check model files
-    model_dir = Path(__file__).parent
+    model_dir = Path(__file__).parent / 'artifacts'
     print(f"\nModel Files:")
     for pkl_file in model_dir.glob('*.pkl'):
         size_kb = pkl_file.stat().st_size / 1024
