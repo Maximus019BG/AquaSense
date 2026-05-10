@@ -5,7 +5,8 @@
 // by a microcontroller that forwards messages over serial. This header keeps
 // parity with embedded gateway implementations.
 
-class GatewayLoRa {
+class GatewayLoRa
+{
 public:
     GatewayLoRa(long freq) {}
     bool begin() { return false; }
