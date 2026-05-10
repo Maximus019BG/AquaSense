@@ -19,6 +19,17 @@ export interface WaterData {
   timestamp: Date;
 }
 
+export interface WaterReadingDb {
+  id: string;
+  sensor_id: string | null;
+  temperature: number;
+  ph: number;
+  turbidity: number;
+  dissolved_oxygen: number;
+  water_level: number;
+  created_at: string;
+}
+
 export type ParameterStatus = "normal" | "warning" | "critical";
 
 export interface Sensor {

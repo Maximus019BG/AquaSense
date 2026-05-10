@@ -25,6 +25,7 @@ interface SensorValues {
   dissolvedOxygen: number;
   waterLevel: number;
   alertLevel: "none" | "warning" | "critical";
+  lastUpdate: Date | null;
 }
 
 const INITIAL_SENSORS: SensorValues = {
@@ -34,6 +35,7 @@ const INITIAL_SENSORS: SensorValues = {
   dissolvedOxygen: 8.5,
   waterLevel: 250,
   alertLevel: "none",
+  lastUpdate: null,
 };
 
 const mockAlerts: Alert[] = [
@@ -93,23 +95,42 @@ export default function DashboardPage() {
   const [quality, setQuality] = useState<"PERF" | "HIGH" | "ULTRA">("ULTRA");
   const [timeOfDay, setTimeOfDay] = useState(12);
   const [syncAgo, setSyncAgo] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchLatestData = useCallback(async () => {
+    try {
+      const response = await fetch("/api/readings");
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setSensors({
+          temperature: result.data.temperature,
+          ph: result.data.ph,
+          turbidity: result.data.turbidity,
+          dissolvedOxygen: result.data.dissolvedOxygen,
+          waterLevel: result.data.waterLevel,
+          alertLevel: "none",
+          lastUpdate: new Date(result.data.timestamp),
+        });
+        setError(null);
+        setSyncAgo(0);
+      } else {
+        setError(result.error || "Failed to fetch data");
+      }
+    } catch (err) {
+      setError("Connection error");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
+    fetchLatestData();
+    
     const interval = setInterval(() => {
-      setSensors((s) => ({
-        ...s,
-        temperature: +(
-          s.temperature + (Math.random() - 0.5) * 0.04
-        ).toFixed(2),
-        ph: +Math.max(4, Math.min(10, s.ph + (Math.random() - 0.5) * 0.004)).toFixed(3),
-        turbidity: +Math.max(0, s.turbidity + (Math.random() - 0.5) * 0.08).toFixed(1),
-        dissolvedOxygen: +Math.max(
-          0,
-          Math.min(14, s.dissolvedOxygen + (Math.random() - 0.5) * 0.015)
-        ).toFixed(2),
-      }));
-      setSyncAgo(0);
-    }, 2000);
+      fetchLatestData();
+    }, 5000);
 
     const syncInterval = setInterval(() => setSyncAgo((a) => a + 1), 1000);
 
@@ -117,7 +138,7 @@ export default function DashboardPage() {
       clearInterval(interval);
       clearInterval(syncInterval);
     };
-  }, []);
+  }, [fetchLatestData]);
 
   const alertCount = useMemo(() => {
     let c = 0;
