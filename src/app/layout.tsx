@@ -1,6 +1,5 @@
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "~/styles/globals.css";
-import { TRPCReactProvider } from "~/trpc/react";
 import { Header } from "~/components/layout/header";
 import { Sidebar } from "~/components/layout/sidebar";
 
@@ -30,15 +29,13 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrains.variable} ${spaceGrotesk.variable}`}
     >
       <body className="font-sans">
-        <TRPCReactProvider>
-          <div className="min-h-screen bg-[#0A1929] text-white">
-            <Header />
-            <div className="flex">
-              <Sidebar />
-              <main className="flex-1 p-6">{children}</main>
-            </div>
+        <div className="bg-ocean-deep min-h-screen text-white">
+          <Header />
+          <div className="flex">
+            <Sidebar />
+            <main className="flex-1 p-6">{children}</main>
           </div>
-        </TRPCReactProvider>
+        </div>
       </body>
     </html>
   );

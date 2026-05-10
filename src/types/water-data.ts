@@ -1,3 +1,7 @@
+import { type WaterReading as DrizzleWaterReading } from "~/server/db/schema";
+
+export type WaterReading = DrizzleWaterReading;
+
 export interface WaterParameter {
   id: string;
   name: string;

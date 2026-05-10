@@ -1,30 +1,42 @@
 import { NextResponse } from "next/server";
-import { supabase } from "~/lib/supabase";
+import { desc } from "drizzle-orm";
+import { db } from "~/server/db";
+import { waterReadingsTable } from "~/server/db/schema";
 
 export async function GET() {
-  const { data, error } = await supabase
-    .from("water_readings")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+  try {
+    const result = await db
+      .select()
+      .from(waterReadingsTable)
+      .orderBy(desc(waterReadingsTable.created_at))
+      .limit(1);
 
-  if (error) {
+    const data = result[0];
+
+    if (!data) {
+      return NextResponse.json(
+        { success: false, error: "No readings found" },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        temperature: Number(data.temperature),
+        ph: Number(data.ph),
+        turbidity: Number(data.turbidity),
+        dissolvedOxygen: Number(data.dissolved_oxygen),
+        waterLevel: Number(data.water_level),
+        timestamp: data.created_at,
+      },
+    });
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
+      { success: false, error: errorMessage },
+      { status: 500 },
     );
   }
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      temperature: data.temperature,
-      ph: data.ph,
-      turbidity: data.turbidity,
-      dissolvedOxygen: data.dissolved_oxygen,
-      waterLevel: data.water_level,
-      timestamp: data.created_at,
-    },
-  });
 }
