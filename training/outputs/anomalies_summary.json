@@ -1,0 +1,350 @@
+{
+  "total_points": 370,
+  "n_anomalies": 19,
+  "fraction": 0.051351351351351354,
+  "anomalies": [
+    {
+      "index": 40,
+      "time": "2022-07-06T00:00:00",
+      "features": {
+        "temperature_C": 24.151346,
+        "dissolved_o2": 249.79303,
+        "salinity_psu": 18.348673,
+        "sea_level_m": 0.38490108
+      },
+      "top_deviating_feature": "sea_level_m",
+      "top_z_score": 1.9097946649198558,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": 0.0005405800000000127
+      }
+    },
+    {
+      "index": 88,
+      "time": "2022-08-23T00:00:00",
+      "features": {
+        "temperature_C": 27.496565,
+        "dissolved_o2": 231.16801,
+        "salinity_psu": 18.44552,
+        "sea_level_m": 0.35745662
+      },
+      "top_deviating_feature": "temperature_C",
+      "top_z_score": 1.737157951803329,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.0011155700000000102
+      }
+    },
+    {
+      "index": 97,
+      "time": "2022-09-01T00:00:00",
+      "features": {
+        "temperature_C": 27.54685,
+        "dissolved_o2": 229.26003,
+        "salinity_psu": 18.512753,
+        "sea_level_m": 0.34608966
+      },
+      "top_deviating_feature": "temperature_C",
+      "top_z_score": 1.7451281844992166,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": 0.00044842999999999966
+      }
+    },
+    {
+      "index": 98,
+      "time": "2022-09-02T00:00:00",
+      "features": {
+        "temperature_C": 27.213642,
+        "dissolved_o2": 230.62286,
+        "salinity_psu": 18.528158,
+        "sea_level_m": 0.34303337
+      },
+      "top_deviating_feature": "temperature_C",
+      "top_z_score": 1.692314317617814,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.003056290000000017
+      }
+    },
+    {
+      "index": 99,
+      "time": "2022-09-03T00:00:00",
+      "features": {
+        "temperature_C": 26.947302,
+        "dissolved_o2": 231.53572,
+        "salinity_psu": 18.544573,
+        "sea_level_m": 0.342208
+      },
+      "top_deviating_feature": "temperature_C",
+      "top_z_score": 1.650099108783714,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.0008253699999999919
+      }
+    },
+    {
+      "index": 100,
+      "time": "2022-09-04T00:00:00",
+      "features": {
+        "temperature_C": 26.446909,
+        "dissolved_o2": 232.84465,
+        "salinity_psu": 18.547102,
+        "sea_level_m": 0.33903268
+      },
+      "top_deviating_feature": "temperature_C",
+      "top_z_score": 1.5707862192660982,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.003175320000000037
+      }
+    },
+    {
+      "index": 101,
+      "time": "2022-09-05T00:00:00",
+      "features": {
+        "temperature_C": 25.788029,
+        "dissolved_o2": 235.08301,
+        "salinity_psu": 18.5683,
+        "sea_level_m": 0.33227012
+      },
+      "top_deviating_feature": "dissolved_o2",
+      "top_z_score": 1.488966278908833,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.006762559999999973
+      }
+    },
+    {
+      "index": 102,
+      "time": "2022-09-06T00:00:00",
+      "features": {
+        "temperature_C": 25.089956,
+        "dissolved_o2": 237.3785,
+        "salinity_psu": 18.574978,
+        "sea_level_m": 0.32336244
+      },
+      "top_deviating_feature": "dissolved_o2",
+      "top_z_score": 1.4147032172373377,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.008907680000000029
+      }
+    },
+    {
+      "index": 103,
+      "time": "2022-09-07T00:00:00",
+      "features": {
+        "temperature_C": 24.472631,
+        "dissolved_o2": 238.55171,
+        "salinity_psu": 18.580545,
+        "sea_level_m": 0.31455326
+      },
+      "top_deviating_feature": "dissolved_o2",
+      "top_z_score": 1.3767478497194587,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.008809179999999972
+      }
+    },
+    {
+      "index": 265,
+      "time": "2023-02-16T00:00:00",
+      "features": {
+        "temperature_C": 8.123029,
+        "dissolved_o2": 311.03177,
+        "salinity_psu": 18.611713,
+        "sea_level_m": 0.28333277
+      },
+      "top_deviating_feature": "sea_level_m",
+      "top_z_score": 2.058075768926772,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.0005680899999999656
+      }
+    },
+    {
+      "index": 266,
+      "time": "2023-02-17T00:00:00",
+      "features": {
+        "temperature_C": 8.077129,
+        "dissolved_o2": 312.4163,
+        "salinity_psu": 18.60769,
+        "sea_level_m": 0.28129473
+      },
+      "top_deviating_feature": "sea_level_m",
+      "top_z_score": 2.137693896460812,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.0020380400000000187
+      }
+    },
+    {
+      "index": 267,
+      "time": "2023-02-18T00:00:00",
+      "features": {
+        "temperature_C": 8.096319,
+        "dissolved_o2": 313.64047,
+        "salinity_psu": 18.60116,
+        "sea_level_m": 0.28261176
+      },
+      "top_deviating_feature": "sea_level_m",
+      "top_z_score": 2.0862427657145286,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": 0.0013170299999999968
+      }
+    },
+    {
+      "index": 279,
+      "time": "2023-03-02T00:00:00",
+      "features": {
+        "temperature_C": 8.183473,
+        "dissolved_o2": 323.04245,
+        "salinity_psu": 18.553482,
+        "sea_level_m": 0.28702658
+      },
+      "top_deviating_feature": "sea_level_m",
+      "top_z_score": 1.913773284350167,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.0026473700000000377
+      }
+    },
+    {
+      "index": 280,
+      "time": "2023-03-03T00:00:00",
+      "features": {
+        "temperature_C": 8.193706,
+        "dissolved_o2": 323.7134,
+        "salinity_psu": 18.54501,
+        "sea_level_m": 0.28483847
+      },
+      "top_deviating_feature": "sea_level_m",
+      "top_z_score": 1.9992540506935668,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.0021881099999999654
+      }
+    },
+    {
+      "index": 281,
+      "time": "2023-03-04T00:00:00",
+      "features": {
+        "temperature_C": 8.208011,
+        "dissolved_o2": 324.66318,
+        "salinity_psu": 18.5348,
+        "sea_level_m": 0.28438175
+      },
+      "top_deviating_feature": "sea_level_m",
+      "top_z_score": 2.0170962869633886,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": -0.00045672000000002155
+      }
+    },
+    {
+      "index": 282,
+      "time": "2023-03-05T00:00:00",
+      "features": {
+        "temperature_C": 8.283356,
+        "dissolved_o2": 325.2953,
+        "salinity_psu": 18.52797,
+        "sea_level_m": 0.2849974
+      },
+      "top_deviating_feature": "sea_level_m",
+      "top_z_score": 1.993045286876868,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": 0.0006156500000000231
+      }
+    },
+    {
+      "index": 354,
+      "time": "2023-05-16T00:00:00",
+      "features": {
+        "temperature_C": 14.639,
+        "dissolved_o2": 300.43958,
+        "salinity_psu": 18.322208,
+        "sea_level_m": 0.34840935
+      },
+      "top_deviating_feature": "salinity_psu",
+      "top_z_score": 1.8323095048894356,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": 1.8920000000033355e-05
+      }
+    },
+    {
+      "index": 363,
+      "time": "2023-05-25T00:00:00",
+      "features": {
+        "temperature_C": 17.327648,
+        "dissolved_o2": 288.1419,
+        "salinity_psu": 18.309702,
+        "sea_level_m": 0.3425633
+      },
+      "top_deviating_feature": "salinity_psu",
+      "top_z_score": 1.971968158044109,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": 0.0011208000000000329
+      }
+    },
+    {
+      "index": 369,
+      "time": "2023-05-31T00:00:00",
+      "features": {
+        "temperature_C": 18.664486,
+        "dissolved_o2": 279.91702,
+        "salinity_psu": 18.298817,
+        "sea_level_m": 0.34962863
+      },
+      "top_deviating_feature": "salinity_psu",
+      "top_z_score": 2.0935245661353514,
+      "thresholds": {
+        "temp_high": false,
+        "o2_low": false,
+        "sea_level_spike": false,
+        "sea_level_diff": 0.0013401799999999686
+      }
+    }
+  ],
+  "reason_counts": {}
+}
