@@ -1,8 +1,8 @@
-#include <cstddef>
 // Shared protocol definitions between sensor and gateway
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 namespace Shared
 {
