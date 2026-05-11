@@ -47,3 +47,11 @@ yarn-error.log*
 
 # Claude Code local config
 .claude
+
+# Windows OS artifacts
+Thumbs.db
+desktop.ini
+*.lnk
+
+# Stray accidental files
+,
