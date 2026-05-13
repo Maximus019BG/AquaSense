@@ -2,20 +2,27 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <math.h>
-#include <DHT.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <stdarg.h>
 #include "sensor.h"
 #include "lora_module.h"
 #include "protocol.h"
 
 #define DEVICE_ID "sensor-01"
-#define ADXL345_ADDR 0x53
-#define BH1750_ADDR 0x23
+#include <stdint.h>
+#include <SPI.h>
 
-#ifndef TEMP_SENSOR_TYPE
-#define TEMP_SENSOR_TYPE DHT22
-#endif
+// ADXL345 transport/address/pins are detected at runtime.
+uint8_t adxlAddr = 0;
+bool adxlSpi = false;
+uint8_t adxlCsPin = 0;
+uint8_t adxlSdaPin = 0;
+uint8_t adxlSclPin = 0;
+uint8_t adxlSckPin = 0;
+uint8_t adxlMisoPin = 0;
+uint8_t adxlMosiPin = 0;
+#define BH1750_ADDR 0x23
 
 Sensor sensor(SENSOR_PIN);
 LoRaModule lora(LORA_FREQUENCY);
@@ -24,10 +31,40 @@ bool adxlReady = false;
 bool bh1750Ready = false;
 
 TwoWire i2cBus(0);
-DHT tempSensor(TEMP_SENSOR_PIN, TEMP_SENSOR_TYPE);
 OneWire oneWire(TEMP_SENSOR_PIN);
 DallasTemperature oneWireTherm(&oneWire);
 bool oneWireReady = false;
+
+void logMessage(const char *level, const char *tag, const char *fmt, ...)
+{
+    char msg[192];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, args);
+    va_end(args);
+
+    Serial.printf("[%8lu ms] %-5s %-8s %s\n", (unsigned long)millis(), level, tag, msg);
+}
+
+void logInfo(const char *tag, const char *fmt, ...)
+{
+    char msg[192];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, args);
+    va_end(args);
+    logMessage("INFO", tag, "%s", msg);
+}
+
+void logWarn(const char *tag, const char *fmt, ...)
+{
+    char msg[192];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, args);
+    va_end(args);
+    logMessage("WARN", tag, "%s", msg);
+}
 
 bool writeRegister(TwoWire &bus, uint8_t address, uint8_t reg, uint8_t value)
 {
@@ -54,20 +91,96 @@ bool readBytes(TwoWire &bus, uint8_t address, uint8_t reg, uint8_t *buffer, size
     return true;
 }
 
-bool initAdxl345()
+bool initAdxl345OnCurrentI2C()
 {
-    if (!writeRegister(i2cBus, ADXL345_ADDR, 0x2D, 0x08))
+    const uint8_t candidates[] = {0x53, 0x1D};
+    for (size_t i = 0; i < sizeof(candidates); ++i)
+    {
+        uint8_t addr = candidates[i];
+        uint8_t dev = 0;
+        if (readBytes(i2cBus, addr, 0x00, &dev, 1) && dev == 0xE5 &&
+            writeRegister(i2cBus, addr, 0x2D, 0x08) && writeRegister(i2cBus, addr, 0x31, 0x08))
+        {
+            adxlAddr = addr;
+            adxlSpi = false;
+            return true;
+        }
+    }
+    return false;
+}
+
+// SPI helpers for ADXL345
+bool writeRegisterSpi(uint8_t csPin, uint8_t reg, uint8_t value)
+{
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+    digitalWrite(csPin, LOW);
+    SPI.transfer(reg & 0x7F); // write = bit7 clear
+    SPI.transfer(value);
+    digitalWrite(csPin, HIGH);
+    SPI.endTransaction();
+    return true;
+}
+
+bool readBytesSpi(uint8_t csPin, uint8_t reg, uint8_t *buffer, size_t length)
+{
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+    digitalWrite(csPin, LOW);
+    uint8_t cmd = 0x80 | (length > 1 ? 0x40 : 0x00) | (reg & 0x3F);
+    SPI.transfer(cmd);
+    for (size_t i = 0; i < length; ++i)
+        buffer[i] = SPI.transfer(0x00);
+    digitalWrite(csPin, HIGH);
+    SPI.endTransaction();
+    return true;
+}
+
+bool initAdxlSpi(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t csPin)
+{
+    pinMode(csPin, OUTPUT);
+    digitalWrite(csPin, HIGH);
+    SPI.begin(sck, miso, mosi, csPin);
+    // Verify ADXL345 identity first
+    uint8_t devid = 0;
+    if (!readBytesSpi(csPin, 0x00, &devid, 1))
         return false;
-    if (!writeRegister(i2cBus, ADXL345_ADDR, 0x31, 0x08))
+    if (devid != 0xE5)
+    {
+        logWarn("ADXL345", "SPI device ID mismatch: 0x%02X", (unsigned)devid);
         return false;
+    }
+
+    // Put device in measurement mode
+    if (!writeRegisterSpi(csPin, 0x2D, 0x08))
+        return false;
+    if (!writeRegisterSpi(csPin, 0x31, 0x08))
+        return false;
+    adxlSpi = true;
+    adxlCsPin = csPin;
+    adxlSckPin = sck;
+    adxlMisoPin = miso;
+    adxlMosiPin = mosi;
     return true;
 }
 
 bool readAdxl345(int16_t &x, int16_t &y, int16_t &z)
 {
     uint8_t raw[6];
-    if (!readBytes(i2cBus, ADXL345_ADDR, 0x32, raw, sizeof(raw)))
-        return false;
+    if (adxlSpi)
+    {
+        SPI.begin(adxlSckPin, adxlMisoPin, adxlMosiPin, adxlCsPin);
+        if (!readBytesSpi(adxlCsPin, 0x32, raw, sizeof(raw)))
+            return false;
+    }
+    else
+    {
+        if (adxlAddr == 0)
+            return false;
+        i2cBus.end();
+        i2cBus.begin(adxlSdaPin, adxlSclPin);
+        i2cBus.setClock(400000);
+        if (!readBytes(i2cBus, adxlAddr, 0x32, raw, sizeof(raw)))
+            return false;
+    }
 
     x = (int16_t)((raw[1] << 8) | raw[0]);
     y = (int16_t)((raw[3] << 8) | raw[2]);
@@ -75,8 +188,53 @@ bool readAdxl345(int16_t &x, int16_t &y, int16_t &z)
     return true;
 }
 
+void i2cScan()
+{
+    logInfo("I2C", "scan started");
+    for (uint8_t addr = 1; addr < 127; ++addr)
+    {
+        i2cBus.beginTransmission(addr);
+        if (i2cBus.endTransmission() == 0)
+        {
+            logInfo("I2C", "device found at 0x%02X", (unsigned)addr);
+            delay(10);
+        }
+    }
+    logInfo("I2C", "scan completed");
+}
+
+bool tryAdxlOnPins(uint8_t sda, uint8_t scl)
+{
+    logInfo("ADXL345", "trying I2C SDA=%d SCL=%d", (int)sda, (int)scl);
+    i2cBus.end();
+    i2cBus.begin(sda, scl);
+    i2cBus.setClock(400000);
+    i2cScan();
+    bool ok = initAdxl345OnCurrentI2C();
+    if (ok)
+    {
+        adxlSdaPin = sda;
+        adxlSclPin = scl;
+        logInfo("ADXL345", "detected at 0x%02X on SDA=%d SCL=%d", (unsigned)adxlAddr, (int)sda, (int)scl);
+        // Read DEVID (register 0x00) to confirm device identity
+        uint8_t dev = 0;
+        if (readBytes(i2cBus, adxlAddr, 0x00, &dev, 1))
+        {
+            logInfo("ADXL345", "device ID: 0x%02X", (unsigned)dev);
+        }
+    }
+    else
+    {
+        logWarn("ADXL345", "not detected on SDA=%d SCL=%d", (int)sda, (int)scl);
+    }
+    return ok;
+}
+
 bool initBh1750()
 {
+    i2cBus.end();
+    i2cBus.begin(BH1750_SDA_PIN, BH1750_SCL_PIN);
+    i2cBus.setClock(400000);
     i2cBus.beginTransmission(BH1750_ADDR);
     i2cBus.write(0x01);
     if (i2cBus.endTransmission() != 0)
@@ -89,6 +247,9 @@ bool initBh1750()
 
 bool readBh1750(float &lux)
 {
+    i2cBus.end();
+    i2cBus.begin(BH1750_SDA_PIN, BH1750_SCL_PIN);
+    i2cBus.setClock(400000);
     i2cBus.beginTransmission(BH1750_ADDR);
     i2cBus.write(0x10);
     if (i2cBus.endTransmission() != 0)
@@ -117,11 +278,11 @@ void logAndSend(const char *label, const char *metric, int32_t value, const char
 {
     if (unit && unit[0] != '\0')
     {
-        Serial.printf("%s: %ld %s\n", label, (long)value, unit);
+        logInfo("DATA", "%s=%ld %s", label, (long)value, unit);
     }
     else
     {
-        Serial.printf("%s: %ld\n", label, (long)value);
+        logInfo("DATA", "%s=%ld", label, (long)value);
     }
 
     if (!useLoRa)
@@ -135,7 +296,10 @@ void logAndSend(const char *label, const char *metric, int32_t value, const char
     if (n)
     {
         bool ok = lora.send((const uint8_t *)buf, n);
-        Serial.printf("Sent %s -> %s\n", buf, ok ? "OK" : "FAIL");
+        if (ok)
+            logInfo("LORA", "tx ok: %s", buf);
+        else
+            logWarn("LORA", "tx failed: %s", buf);
     }
 }
 
@@ -143,36 +307,77 @@ void setup()
 {
     Serial.begin(115200);
     delay(100);
-    Serial.println("Sensor device starting...");
+    logInfo("SYS", "sensor device starting");
 
     sensor.begin();
 
-    i2cBus.begin(ADXL345_SDA_PIN, ADXL345_SCL_PIN);
-    i2cBus.setClock(400000);
-    adxlReady = initAdxl345();
-    Serial.println(adxlReady ? "ADXL345 ready" : "ADXL345 init failed");
+    // Try confirmed ADXL345 wiring first, then light fallbacks.
+    const uint8_t pinPairs[][2] = {
+        {5, 18},
+        {ADXL345_SDA_PIN, ADXL345_SCL_PIN},
+        {16, 17},
+        {21, 22},
+    };
+
+    for (size_t i = 0; i < sizeof(pinPairs) / 2; ++i)
+    {
+        uint8_t sda = pinPairs[i][0];
+        uint8_t scl = pinPairs[i][1];
+        if (tryAdxlOnPins(sda, scl))
+        {
+            adxlReady = true;
+            break;
+        }
+    }
+
+    // If I2C attempts fail, try a minimal SPI fallback set.
+    if (!adxlReady)
+    {
+        const uint8_t spiBuses[][3] = {{18, 19, 23}};
+        const uint8_t csCandidates[] = {5, 15};
+
+        logWarn("ADXL345", "I2C not found; trying SPI combinations");
+        for (size_t b = 0; b < sizeof(spiBuses) / 3 && !adxlReady; ++b)
+        {
+            uint8_t sck = spiBuses[b][0];
+            uint8_t miso = spiBuses[b][1];
+            uint8_t mosi = spiBuses[b][2];
+            for (size_t c = 0; c < sizeof(csCandidates) && !adxlReady; ++c)
+            {
+                uint8_t cs = csCandidates[c];
+                logInfo("ADXL345", "trying SPI SCK=%d MISO=%d MOSI=%d CS=%d", (int)sck, (int)miso, (int)mosi, (int)cs);
+                if (initAdxlSpi(sck, miso, mosi, cs))
+                {
+                    adxlReady = true;
+                    logInfo("ADXL345", "SPI ready SCK=%d MISO=%d MOSI=%d CS=%d", (int)sck, (int)miso, (int)mosi, (int)cs);
+                }
+            }
+        }
+
+        if (!adxlReady)
+            logWarn("ADXL345", "initialization failed");
+    }
 
     bh1750Ready = initBh1750();
-    Serial.println(bh1750Ready ? "BH1750 ready" : "BH1750 init failed");
+    logMessage(bh1750Ready ? "INFO" : "WARN", "BH1750", bh1750Ready ? "ready" : "initialization failed");
 
-    tempSensor.begin();
     oneWireTherm.begin();
     uint8_t count = oneWireTherm.getDeviceCount();
     oneWireReady = (count > 0);
-    Serial.printf("OneWire devices=%u\n", (unsigned)count);
-    Serial.println("Temperature sensor ready");
+    logInfo("TEMP", "OneWire devices=%u", (unsigned)count);
+    logInfo("TEMP", "temperature sensor ready");
 
     if (!lora.begin())
     {
-        Serial.println("LoRa init failed — continuing without LoRa");
+        logWarn("LORA", "initialization failed; continuing without LoRa");
         useLoRa = false;
     }
     else
     {
-        Serial.println("LoRa ready");
+        logInfo("LORA", "ready");
     }
 
-    Serial.println("Using fixed mapping: raw 1800 -> 100% clear");
+    logInfo("TURB", "fixed mapping enabled: raw 1800 => 100%% clear");
 }
 
 void loop()
@@ -185,9 +390,9 @@ void loop()
     if (pct > 100.0f)
         pct = 100.0f;
 
-    Serial.printf("Turbidity raw=%d -> %.1f%% clear\n", val, pct);
+    logInfo("TURB", "raw=%d -> %.1f%% clear", val, pct);
     logAndSend("Turbidity raw", "turb_raw", val, "raw");
-    logAndSend("Turbidity clear", "turb_pct_x10", (int32_t)lroundf(pct * 10.0f), "%");
+    logAndSend("Turbidity clear", "turb_pct", (int32_t)lroundf(pct), "%");
 
     if (adxlReady)
     {
@@ -196,14 +401,14 @@ void loop()
         int16_t az = 0;
         if (readAdxl345(ax, ay, az))
         {
-            Serial.printf("ADXL345 x=%d y=%d z=%d\n", (int)ax, (int)ay, (int)az);
+            logInfo("ADXL345", "x=%d y=%d z=%d", (int)ax, (int)ay, (int)az);
             logAndSend("ADXL345 X", "accel_x", ax, "raw");
             logAndSend("ADXL345 Y", "accel_y", ay, "raw");
             logAndSend("ADXL345 Z", "accel_z", az, "raw");
         }
         else
         {
-            Serial.println("ADXL345 read failed");
+            logWarn("ADXL345", "read failed");
         }
     }
 
@@ -213,39 +418,25 @@ void loop()
         if (readBh1750(lux))
         {
             int32_t luxInt = (int32_t)lroundf(lux);
-            Serial.printf("BH1750 lux=%.1f\n", lux);
+            logInfo("BH1750", "lux=%.1f", lux);
             logAndSend("BH1750 lux", "lux", luxInt, "lx");
         }
         else
         {
-            Serial.println("BH1750 read failed");
+            logWarn("BH1750", "read failed");
         }
     }
 
     // Try analog read (thermistor/LM35 style probe)
     int analogRaw = analogRead(TEMP_SENSOR_PIN);
-    Serial.printf("Analog read (pin %d) = %d\n", TEMP_SENSOR_PIN, analogRaw);
-
-    // Try DHT read (if it was a DHT sensor)
-    float tempC = tempSensor.readTemperature();
-    Serial.printf("DHT raw read: tempC=%.2f (isnan=%d)\n", tempC, isnan(tempC));
-    if (!isnan(tempC) && tempC > -40.0f && tempC < 80.0f)
-    {
-        int32_t tempCx10 = (int32_t)lroundf(tempC * 10.0f);
-        Serial.printf("Temperature (DHT)=%.1f C\n", tempC);
-        logAndSend("Temperature(DHT)", "temp_c_x10", tempCx10, "x10C");
-    }
-    else
-    {
-        Serial.printf("Temperature DHT read failed (raw=%.2f)\n", tempC);
-    }
+    logInfo("TEMP", "analog pin %d raw=%d", TEMP_SENSOR_PIN, analogRaw);
 
     // Try OneWire (DS18B20 / waterproof probe)
     if (oneWireReady)
     {
         oneWireTherm.requestTemperatures();
         float owTemp = oneWireTherm.getTempCByIndex(0);
-        Serial.printf("OneWire temp=%.2f C\n", owTemp);
+        logInfo("TEMP", "OneWire temp=%.2f C", owTemp);
         if (!isnan(owTemp) && owTemp > -55 && owTemp < 125)
         {
             int32_t tempCx10 = (int32_t)lroundf(owTemp * 10.0f);
