@@ -9,8 +9,8 @@ namespace Shared
 
     size_t serializePayload(const SensorPayload &p, char *buf, size_t bufsize)
     {
-        int r = snprintf(buf, bufsize, "{\"id\":\"%s\",\"value\":%ld,\"ts\":%lu}",
-                         p.id, (long)p.value, (unsigned long)p.ts);
+        int r = snprintf(buf, bufsize, "{\"id\":\"%s\",\"metric\":\"%s\",\"value\":%ld,\"ts\":%lu}",
+                         p.id, p.metric, (long)p.value, (unsigned long)p.ts);
         if (r < 0)
             return 0;
         if ((size_t)r >= bufsize)
@@ -34,6 +34,24 @@ namespace Shared
             return false;
         memcpy(out.id, p, len);
         out.id[len] = '\0';
+
+        const char *metricp = strstr(q, "\"metric\":\"");
+        if (metricp)
+        {
+            metricp += 10;
+            const char *metricEnd = strchr(metricp, '"');
+            if (!metricEnd)
+                return false;
+            size_t metricLen = metricEnd - metricp;
+            if (metricLen >= sizeof(out.metric))
+                return false;
+            memcpy(out.metric, metricp, metricLen);
+            out.metric[metricLen] = '\0';
+        }
+        else
+        {
+            out.metric[0] = '\0';
+        }
 
         const char *valp = strstr(q, "\"value\":");
         if (!valp)

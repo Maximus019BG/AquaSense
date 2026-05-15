@@ -10,6 +10,7 @@ namespace Shared
     struct SensorPayload
     {
         char id[16];
+        char metric[16];
         int32_t value;
         uint32_t ts; // epoch seconds
     };
