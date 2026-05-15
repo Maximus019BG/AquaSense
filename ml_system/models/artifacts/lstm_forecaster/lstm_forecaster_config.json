@@ -1,0 +1,69 @@
+{
+  "model_name": "lstm_forecaster",
+  "lookback": 60,
+  "feature_columns": [
+    "sea_level_m",
+    "temperature_C",
+    "dissolved_o2",
+    "primary_production",
+    "salinity_psu",
+    "nitrate",
+    "phosphate"
+  ],
+  "target_columns": [
+    "sea_level_m",
+    "temperature_C",
+    "dissolved_o2",
+    "primary_production",
+    "salinity_psu",
+    "nitrate",
+    "phosphate"
+  ],
+  "forecast_frequency": "1D",
+  "train_rows": 259,
+  "validation_rows": 115,
+  "test_rows": 116,
+  "test_loss": 0.10423734039068222,
+  "test_mae": 0.24704159796237946,
+  "feature_metrics": [
+    {
+      "feature": "sea_level_m",
+      "mae": 0.023945339024066925,
+      "rmse": 0.028026603162288666
+    },
+    {
+      "feature": "temperature_C",
+      "mae": 2.1011197566986084,
+      "rmse": 2.9934747219085693
+    },
+    {
+      "feature": "dissolved_o2",
+      "mae": 6.938088417053223,
+      "rmse": 7.415864944458008
+    },
+    {
+      "feature": "primary_production",
+      "mae": 6.060805797576904,
+      "rmse": 6.418050289154053
+    },
+    {
+      "feature": "salinity_psu",
+      "mae": 0.12204237282276154,
+      "rmse": 0.135955348610878
+    },
+    {
+      "feature": "nitrate",
+      "mae": 0.7326580286026001,
+      "rmse": 0.811768114566803
+    },
+    {
+      "feature": "phosphate",
+      "mae": 0.050352539867162704,
+      "rmse": 0.0675368383526802
+    }
+  ],
+  "date_range": {
+    "start": "2022-05-27T00:00:00",
+    "end": "2023-05-31T00:00:00"
+  }
+}

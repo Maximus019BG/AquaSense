@@ -3,9 +3,11 @@ import sys
 from typing import List, Dict, Optional
 import hashlib
 import os
+import json
+import re
 import uuid
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ensure project root is on path so we can import ml_system package
 project_root = Path(__file__).resolve().parents[2]
@@ -16,17 +18,33 @@ from pydantic import BaseModel, Field
 
 from ml_system.models.aquasense_models import ModelLoader
 
+import joblib
+import numpy as np
+import pandas as pd
+
+try:
+    import tensorflow as tf
+except Exception:
+    tf = None
+
 app = FastAPI(title="AquaSense Inference Service")
 
 # Load model on startup (singleton)
 MODEL_DIR = Path(__file__).resolve().parents[1] / 'models'
 # ModelLoader will find artifacts relative to its module; use default
 loader = None
+forecast_model = None
+forecast_scaler = None
+forecast_config: Dict[str, object] = {}
+forecast_features: List[str] = []
+
+FORECAST_ARTIFACT_DIR = Path(__file__).resolve().parents[1] / "models" / "artifacts" / "lstm_forecaster"
 
 @app.on_event("startup")
 def startup_event():
     global loader
     loader = ModelLoader()
+    _load_forecast_assets()
     # load optional imputer if available to ensure end-to-end preprocessing
     try:
         _ = loader.model_dir / 'imputer.joblib'
@@ -50,6 +68,13 @@ class PredictRequest(BaseModel):
     metadata: Optional[Dict[str, str]] = None
 
 
+class ForecastRequest(BaseModel):
+    period: str = Field("7d", description="Forecast horizon such as 2d, 7d, 30d, or 1y")
+    seed_series: Optional[List[Reading]] = None
+    metadata: Optional[Dict[str, str]] = None
+FORECAST_SEED_PATH = Path(__file__).resolve().parents[2] / "docs" / "data" / "processed" / "burgas_final.csv"
+
+
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
@@ -68,6 +93,128 @@ def file_checksum(path: Path) -> str:
     return h.hexdigest()[:12]
 
 
+def _load_forecast_assets() -> None:
+    global forecast_model, forecast_scaler, forecast_config, forecast_features
+
+    model_path = FORECAST_ARTIFACT_DIR / "lstm_forecaster.keras"
+    scaler_path = FORECAST_ARTIFACT_DIR / "lstm_forecaster_scaler.joblib"
+    config_path = FORECAST_ARTIFACT_DIR / "lstm_forecaster_config.json"
+    features_path = FORECAST_ARTIFACT_DIR / "lstm_forecaster_features.json"
+
+    if not model_path.exists() or not scaler_path.exists():
+        return
+
+    if tf is None:
+        return
+
+    if forecast_model is None:
+        forecast_model = tf.keras.models.load_model(model_path)
+    if forecast_scaler is None:
+        forecast_scaler = joblib.load(scaler_path)
+    if not forecast_config and config_path.exists():
+        forecast_config = json.loads(config_path.read_text(encoding="utf-8"))
+    if not forecast_features and features_path.exists():
+        forecast_features = json.loads(features_path.read_text(encoding="utf-8"))
+
+
+def _get_forecast_assets():
+    _load_forecast_assets()
+    if forecast_model is None or forecast_scaler is None:
+        raise HTTPException(
+            status_code=503,
+            detail="LSTM forecast model is not available. Run the training notebook first.",
+        )
+    return forecast_model, forecast_scaler, forecast_config, forecast_features or [
+        "sea_level_m",
+        "temperature_C",
+        "dissolved_o2",
+        "primary_production",
+        "salinity_psu",
+        "nitrate",
+        "phosphate",
+    ]
+
+
+def _parse_period_to_steps(period: str, forecast_frequency: str = "1D") -> int:
+    value = (period or "").strip().lower()
+    match = re.fullmatch(r"(\d+)([dwmyh])", value)
+    if not match:
+        raise HTTPException(status_code=400, detail="period must look like 2d, 7d, 30d, or 1y")
+
+    amount = int(match.group(1))
+    unit = match.group(2)
+
+    if forecast_frequency != "1D":
+        raise HTTPException(status_code=400, detail=f"Unsupported forecast frequency: {forecast_frequency}")
+
+    if unit == "h":
+        steps = max(1, amount // 24)
+    elif unit == "d":
+        steps = amount
+    elif unit == "w":
+        steps = amount * 7
+    elif unit == "m":
+        steps = amount * 30
+    elif unit == "y":
+        steps = amount * 365
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported period unit")
+
+    return max(1, steps)
+
+
+def _load_forecast_seed_frame(feature_columns: List[str], lookback: int) -> pd.DataFrame:
+    if not FORECAST_SEED_PATH.exists():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Forecast seed data not found at {FORECAST_SEED_PATH}. Run the training notebook first.",
+        )
+
+    df = pd.read_csv(FORECAST_SEED_PATH, parse_dates=["time"]).sort_values("time").set_index("time")
+    missing = [column for column in feature_columns if column not in df.columns]
+    if missing:
+        raise HTTPException(status_code=500, detail={"error": "missing_seed_columns", "missing": missing})
+
+    seed_frame = df[feature_columns].tail(lookback).copy()
+    if len(seed_frame) < lookback:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "insufficient_seed_rows", "required": lookback, "provided": len(seed_frame)},
+        )
+
+    return seed_frame.ffill().bfill()
+
+
+def _recursive_forecast(period: str):
+    model, scaler, config, feature_columns = _get_forecast_assets()
+    lookback = int(config.get("lookback", 30)) if config else 30
+    forecast_frequency = str(config.get("forecast_frequency", "1D")) if config else "1D"
+    steps = _parse_period_to_steps(period, forecast_frequency)
+
+    history_df = _load_forecast_seed_frame(feature_columns, lookback)
+    seed_scaled = scaler.transform(history_df)
+    window = np.asarray(seed_scaled, dtype=np.float32)
+
+    predictions_scaled = []
+    for _ in range(steps):
+        next_scaled = model.predict(window[None, ...], verbose=0)[0]
+        predictions_scaled.append(next_scaled)
+        window = np.vstack([window[1:], next_scaled])
+
+    predictions = scaler.inverse_transform(np.asarray(predictions_scaled, dtype=np.float32))
+    last_timestamp = pd.to_datetime(history_df.index[-1])
+
+    forecast_rows = []
+    for index, row in enumerate(predictions, start=1):
+        timestamp = last_timestamp + timedelta(days=index)
+        forecast_rows.append({
+            "timestamp": timestamp.isoformat(),
+            "features": {feature: float(value) for feature, value in zip(feature_columns, row)},
+        })
+
+    return steps, forecast_rows
+
+
 # Simple rate limiter (per-IP) for MVP
 RATE_LIMIT = int(os.environ.get("INFERENCE_RATE_LIMIT_PER_MIN", "60"))
 RATE_STORE: Dict[str, Dict[str, int]] = {}
@@ -82,6 +229,32 @@ def _rate_limit(request: Request):
     if count >= RATE_LIMIT:
         raise HTTPException(status_code=429, detail="rate_limit_exceeded")
     store[window_key] = count + 1
+
+
+@app.post("/forecast")
+def forecast(req: ForecastRequest, request: Request):
+    _validate_service_key(request)
+    _rate_limit(request)
+
+    steps, forecast_rows = _recursive_forecast(req.period)
+
+    try:
+        model_file = FORECAST_ARTIFACT_DIR / "lstm_forecaster.keras"
+        model_version = file_checksum(model_file)
+    except Exception:
+        model_version = "local"
+
+    return {
+        "model_version": model_version,
+        "period": req.period,
+        "steps": steps,
+        "predictions": forecast_rows,
+        "summary": {
+            "n_points": len(forecast_rows),
+            "start_timestamp": forecast_rows[0]["timestamp"] if forecast_rows else None,
+            "end_timestamp": forecast_rows[-1]["timestamp"] if forecast_rows else None,
+        },
+    }
 
 
 @app.post("/predict")

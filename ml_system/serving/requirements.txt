@@ -9,3 +9,4 @@ python-dateutil
 prometheus-client
 requests
 psycopg
+tensorflow

@@ -4,7 +4,8 @@ export async function POST(req: NextRequest) {
   const payload = await req.json()
 
   // Forward to local inference service. In production, set INFERENCE_URL env var.
-  const inferenceUrl = process.env.INFERENCE_URL || 'http://localhost:8000/predict'
+  const inferenceBase = (process.env.INFERENCE_URL || 'http://localhost:8000').replace(/\/(predict|forecast)$/, '')
+  const inferenceUrl = `${inferenceBase}/predict`
 
   const resp = await fetch(inferenceUrl, {
     method: 'POST',
