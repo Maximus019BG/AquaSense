@@ -1,25 +1,15 @@
-import {
-  pgTable,
-  serial,
-  text,
-  timestamp,
-  numeric,
-  boolean,
-} from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, numeric } from "drizzle-orm/pg-core";
+import { sensorsTable } from "./sensors";
 
 export const waterReadingsTable = pgTable("water_readings", {
-  id: serial("id").primaryKey(),
-  sensor_id: text("sensor_id"),
-  temperature: numeric("temperature", { precision: 10, scale: 2 }).notNull(),
-  ph: numeric("ph", { precision: 10, scale: 2 }).notNull(),
-  turbidity: numeric("turbidity", { precision: 10, scale: 2 }).notNull(),
-  dissolved_oxygen: numeric("dissolved_oxygen", {
-    precision: 10,
-    scale: 2,
-  }).notNull(),
-  water_level: numeric("water_level", { precision: 10, scale: 2 }).notNull(),
-  is_anomaly: boolean("is_anomaly").default(false).notNull(),
-  created_at: timestamp("created_at").defaultNow().notNull(),
+  id: uuid("id").defaultRandom().primaryKey(),
+  sensor_id: uuid("sensor_id").references(() => sensorsTable.id),
+  temperature: numeric("temperature"),
+  ph: numeric("ph"),
+  turbidity: numeric("turbidity"),
+  dissolved_oxygen: numeric("dissolved_oxygen"),
+  water_level: numeric("water_level"),
+  created_at: timestamp("created_at").defaultNow(),
 });
 
 export type WaterReading = typeof waterReadingsTable.$inferSelect;
