@@ -49,3 +49,7 @@ yarn-error.log*
 
 
 .pio/
+
+.vscode/
+
+__pycache__/
