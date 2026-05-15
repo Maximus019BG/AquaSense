@@ -6,6 +6,7 @@ int main()
 {
     Shared::SensorPayload p;
     strncpy(p.id, "client-01", sizeof(p.id));
+    strncpy(p.metric, "turb_raw", sizeof(p.metric));
     p.value = 2048;
     p.ts = 1620000000;
 
@@ -25,7 +26,7 @@ int main()
         return 2;
     }
 
-    if (strcmp(p.id, q.id) != 0 || p.value != q.value || p.ts != q.ts)
+    if (strcmp(p.id, q.id) != 0 || strcmp(p.metric, q.metric) != 0 || p.value != q.value || p.ts != q.ts)
     {
         std::cerr << "mismatch\n";
         return 3;
