@@ -13,6 +13,15 @@
 #ifndef DEVICE_ID
 #define DEVICE_ID "sensor-01"
 #endif
+#include <string.h>
+
+// Ensure DEVICE_ID is available as a string literal even when the build
+// system provides it without quotes (e.g. -D DEVICE_ID=client-01).
+#define _STRINGIFY(x) #x
+#define STRINGIFY(x) _STRINGIFY(x)
+#ifndef DEVICE_ID_STR
+#define DEVICE_ID_STR STRINGIFY(DEVICE_ID)
+#endif
 #include <stdint.h>
 #include <SPI.h>
 
@@ -309,7 +318,7 @@ bool readBh1750(float &lux)
 void setPayload(Shared::SensorPayload &p, const char *metric, int32_t value)
 {
     memset(&p, 0, sizeof(p));
-    snprintf(p.id, sizeof(p.id), "%s", DEVICE_ID);
+    snprintf(p.id, sizeof(p.id), "%s", DEVICE_ID_STR);
     snprintf(p.metric, sizeof(p.metric), "%s", metric);
     p.value = value;
     p.ts = (uint32_t)(millis() / 1000);
@@ -465,7 +474,7 @@ void setup()
             logInfo("LORA", "rx: %s", buf);
 
             // ignore packets originating from this device
-            if (strncmp(p.id, DEVICE_ID, sizeof(p.id)) == 0)
+            if (strncmp(p.id, DEVICE_ID_STR, sizeof(p.id)) == 0)
                 return;
 
             // compute origin-based dedupe key (ignore fields that change during relay)

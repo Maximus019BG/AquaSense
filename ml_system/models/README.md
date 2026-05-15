@@ -29,6 +29,18 @@ This directory contains trained machine learning models for AquaSense water qual
 - **Type**: scikit-learn SimpleImputer
 - **Export**: joblib
 
+### 5. **LSTM Forecaster** (`artifacts/lstm_forecaster/`)
+- **Purpose**: Multivariate time-series forecasting for water-quality features
+- **Type**: TensorFlow / Keras Sequential model
+- **Export**: `.keras` model plus scaler and metadata files
+- **Files**:
+    - `lstm_forecaster.keras`
+    - `lstm_forecaster_scaler.joblib`
+    - `lstm_forecaster_features.json`
+    - `lstm_forecaster_config.json`
+    - `lstm_forecaster_summary.txt`
+- **Use**: Load the Keras model and scaler from `models/artifacts/lstm_forecaster/` in the serving layer or in a collaborator's notebook.
+
 ## Installation
 
 1. **Copy the models directory** to your project:
@@ -217,7 +229,13 @@ models/
 │   ├── isolation_forest.pkl     # Anomaly detection model (joblib)
 │   ├── scaler.pkl               # Feature scaler (joblib)
 │   ├── imputer.joblib           # Missing value imputer (joblib)
-│   └── feature_names.json       # Feature metadata
+│   ├── feature_names.json       # Feature metadata
+│   └── lstm_forecaster/         # Exported LSTM forecasting artifacts
+│       ├── lstm_forecaster.keras
+│       ├── lstm_forecaster_scaler.joblib
+│       ├── lstm_forecaster_features.json
+│       ├── lstm_forecaster_config.json
+│       └── lstm_forecaster_summary.txt
 └── README.md                    # This file
 ```
 

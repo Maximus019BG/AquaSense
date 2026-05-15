@@ -8,7 +8,6 @@ class SensorDataReader:
     def read_data(self) -> Optional[Dict[str, Any]]:
         raise NotImplementedError("Subclasses must implement read_data")
 
-
 class DummySensorReader(SensorDataReader):
     """Generates dummy water sensor data if hardware is not available."""
     

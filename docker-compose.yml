@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  inference:
+    build: ./ml_system/serving
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./ml_system/models:/app/ml_system/models:ro
+  web:
+    build: ./web
+    ports:
+      - '3000:3000'
+    environment:
+      - INFERENCE_URL=http://inference:8000/predict
+    depends_on:
+      - inference
