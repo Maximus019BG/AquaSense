@@ -3,3 +3,14 @@ scikit-learn
 joblib
 numpy
 flask
+# FastAPI serving dependencies
+fastapi
+uvicorn[standard]
+requests
+psycopg
+pydantic
+# Optional / recommended: for DB fetch mode and model utils
+python-dotenv
+# LSTM training requirements
+tensorflow
+matplotlib

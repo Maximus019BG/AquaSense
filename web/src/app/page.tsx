@@ -17,6 +17,7 @@ import {
   Moon,
 } from "lucide-react";
 import type { Alert } from "~/types";
+import PredictionForm from "~/components/prediction/PredictionForm";
 
 interface SensorValues {
   temperature: number;
@@ -319,6 +320,15 @@ export default function DashboardPage() {
         ))}
 
         <ForecastPanel />
+      </div>
+
+      <div className="col-span-12 mt-8">
+        <div className="bg-[#1E293B] rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">
+            Prediction Form
+          </h2>
+          <PredictionForm />
+        </div>
       </div>
     </div>
   );
