@@ -9,19 +9,36 @@ namespace Shared
 
     size_t serializePayload(const SensorPayload &p, char *buf, size_t bufsize)
     {
-        int r = snprintf(buf, bufsize, "{\"id\":\"%s\",\"metric\":\"%s\",\"value\":%ld,\"ts\":%lu}",
-                         p.id, p.metric, (long)p.value, (unsigned long)p.ts);
-        if (r < 0)
-            return 0;
-        if ((size_t)r >= bufsize)
-            return 0;
-        return (size_t)r;
+        // Include signature only if present (non-empty)
+        if (p.sig[0] != '\0')
+        {
+            int r = snprintf(buf, bufsize, "{\"id\":\"%s\",\"metric\":\"%s\",\"value\":%ld,\"seq\":%lu,\"hops\":%u,\"ts\":%lu,\"sig\":\"%s\"}",
+                             p.id, p.metric, (long)p.value, (unsigned long)p.seq, (unsigned)p.hops, (unsigned long)p.ts, p.sig);
+            if (r < 0)
+                return 0;
+            if ((size_t)r >= bufsize)
+                return 0;
+            return (size_t)r;
+        }
+        else
+        {
+            int r = snprintf(buf, bufsize, "{\"id\":\"%s\",\"metric\":\"%s\",\"value\":%ld,\"seq\":%lu,\"hops\":%u,\"ts\":%lu}",
+                             p.id, p.metric, (long)p.value, (unsigned long)p.seq, (unsigned)p.hops, (unsigned long)p.ts);
+            if (r < 0)
+                return 0;
+            if ((size_t)r >= bufsize)
+                return 0;
+            return (size_t)r;
+        }
     }
 
     bool parsePayload(const char *str, SensorPayload &out)
     {
         if (!str)
             return false;
+        // default hops/seq to zero unless present
+        out.hops = 0;
+        out.seq = 0;
         const char *p = strstr(str, "\"id\":\"");
         if (!p)
             return false;
@@ -59,6 +76,38 @@ namespace Shared
         valp += 9;
         out.value = atoi(valp);
 
+        // optional seq field
+        const char *seqp = strstr(q, "\"seq\":");
+        if (seqp)
+        {
+            seqp = strchr(seqp, ':');
+            if (seqp)
+            {
+                seqp++;
+                out.seq = (uint32_t)strtoul(seqp, nullptr, 10);
+            }
+            else
+            {
+                out.seq = 0;
+            }
+        }
+
+        // optional hops field
+        const char *hopsp = strstr(q, "\"hops\":");
+        if (hopsp)
+        {
+            hopsp = strchr(hopsp, ':');
+            if (hopsp)
+            {
+                hopsp++;
+                out.hops = (uint8_t)atoi(hopsp);
+            }
+            else
+            {
+                out.hops = 0;
+            }
+        }
+
         const char *tsp = strstr(valp, "\"ts\":");
         if (!tsp)
         {
@@ -72,6 +121,30 @@ namespace Shared
             return false;
         tsp++;
         out.ts = (uint32_t)strtoul(tsp, nullptr, 10);
+
+        // optional signature field
+        const char *sigp = strstr(q, "\"sig\":\"");
+        if (sigp)
+        {
+            sigp += 7; // move to signature value
+            const char *sigEnd = strchr(sigp, '"');
+            if (sigEnd)
+            {
+                size_t sigLen = sigEnd - sigp;
+                if (sigLen >= sizeof(out.sig))
+                    sigLen = sizeof(out.sig) - 1;
+                memcpy(out.sig, sigp, sigLen);
+                out.sig[sigLen] = '\0';
+            }
+            else
+            {
+                out.sig[0] = '\0';
+            }
+        }
+        else
+        {
+            out.sig[0] = '\0';
+        }
         return true;
     }
 

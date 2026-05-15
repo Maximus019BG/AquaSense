@@ -8,8 +8,11 @@
 #include "sensor.h"
 #include "lora_module.h"
 #include "protocol.h"
+#include "../lib/ed25519/ed25519_wrapper.h"
 
+#ifndef DEVICE_ID
 #define DEVICE_ID "sensor-01"
+#endif
 #include <stdint.h>
 #include <SPI.h>
 
@@ -24,7 +27,45 @@ uint8_t adxlMisoPin = 0;
 uint8_t adxlMosiPin = 0;
 #define BH1750_ADDR 0x23
 
+#define RELAY_MAX_HOPS 3
+#define RELAY_CACHE_SIZE 16
+
+static uint32_t relayCache[RELAY_CACHE_SIZE];
+static size_t relayCacheIdx = 0;
+
+static uint32_t seqCounter = 0;
+
+static uint32_t fnv1a_hash(const uint8_t *data, size_t len)
+{
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < len; ++i)
+    {
+        h ^= (uint32_t)data[i];
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static bool relayCacheHas(uint32_t h)
+{
+    for (size_t i = 0; i < RELAY_CACHE_SIZE; ++i)
+    {
+        if (relayCache[i] == h)
+            return true;
+    }
+    return false;
+}
+
+static void relayCacheAdd(uint32_t h)
+{
+    relayCache[relayCacheIdx] = h;
+    relayCacheIdx = (relayCacheIdx + 1) % RELAY_CACHE_SIZE;
+}
+
 Sensor sensor(SENSOR_PIN);
+#ifdef PH_SENSOR_PIN
+Sensor phSensor(PH_SENSOR_PIN);
+#endif
 LoRaModule lora(LORA_FREQUENCY);
 bool useLoRa = true;
 bool adxlReady = false;
@@ -272,6 +313,8 @@ void setPayload(Shared::SensorPayload &p, const char *metric, int32_t value)
     snprintf(p.metric, sizeof(p.metric), "%s", metric);
     p.value = value;
     p.ts = (uint32_t)(millis() / 1000);
+    // assign a per-origin sequence number
+    p.seq = ++seqCounter;
 }
 
 void logAndSend(const char *label, const char *metric, int32_t value, const char *unit)
@@ -291,15 +334,37 @@ void logAndSend(const char *label, const char *metric, int32_t value, const char
     Shared::SensorPayload p;
     setPayload(p, metric, value);
 
+    // First, serialize payload without signature to produce canonical bytes to sign
+    p.sig[0] = '\0';
     char buf[256];
     size_t n = Shared::serializePayload(p, buf, sizeof(buf));
     if (n)
     {
+        // Attempt to sign using ed25519 wrapper. PRIVATE_KEY_B64 can be provided at build time.
+        char sigbuf[128];
+        bool signed_ok = false;
+#ifdef PRIVATE_KEY_B64
+        if (ed25519_sign_base64(PRIVATE_KEY_B64, (const uint8_t *)buf, n, sigbuf, sizeof(sigbuf)))
+        {
+            // attach signature and reserialize
+            strncpy(p.sig, sigbuf, sizeof(p.sig) - 1);
+            p.sig[sizeof(p.sig) - 1] = '\0';
+            size_t m = Shared::serializePayload(p, buf, sizeof(buf));
+            if (m)
+            {
+                n = m;
+                signed_ok = true;
+            }
+        }
+#endif
+        // If signing failed or not available, still send unsigned payload (for testing)
         bool ok = lora.send((const uint8_t *)buf, n);
         if (ok)
             logInfo("LORA", "tx ok: %s", buf);
         else
             logWarn("LORA", "tx failed: %s", buf);
+        if (!signed_ok)
+            logWarn("LORA", "payload sent without signature (signing not available)");
     }
 }
 
@@ -310,6 +375,9 @@ void setup()
     logInfo("SYS", "sensor device starting");
 
     sensor.begin();
+#ifdef PH_SENSOR_PIN
+    phSensor.begin();
+#endif
 
     // Try confirmed ADXL345 wiring first, then light fallbacks.
     const uint8_t pinPairs[][2] = {
@@ -375,6 +443,74 @@ void setup()
     else
     {
         logInfo("LORA", "ready");
+
+        // Register receive handler: parse payloads and act as a simple relay
+        lora.onReceive([](const uint8_t *data, int len)
+                       {
+            // copy into buffer and null-terminate for parser
+            char buf[256];
+            int n = len;
+            if (n > (int)sizeof(buf) - 1)
+                n = (int)sizeof(buf) - 1;
+            memcpy(buf, data, n);
+            buf[n] = '\0';
+
+            Shared::SensorPayload p;
+            if (!Shared::parsePayload(buf, p))
+            {
+                logWarn("LORA", "rx invalid payload");
+                return;
+            }
+
+            logInfo("LORA", "rx: %s", buf);
+
+            // ignore packets originating from this device
+            if (strncmp(p.id, DEVICE_ID, sizeof(p.id)) == 0)
+                return;
+
+            // compute origin-based dedupe key (ignore fields that change during relay)
+            char dedupeKey[128];
+            int dklen = snprintf(dedupeKey, sizeof(dedupeKey), "%s|%lu", p.id, (unsigned long)p.seq);
+            if (dklen < 0)
+            {
+                logWarn("LORA", "dedupe key build failed");
+                return;
+            }
+            uint32_t h = fnv1a_hash((const uint8_t *)dedupeKey, (size_t)dklen);
+            if (relayCacheHas(h))
+            {
+                logInfo("LORA", "rx duplicate, not relaying");
+                return;
+            }
+
+            // only relay if hops < max
+            if (p.hops >= RELAY_MAX_HOPS)
+            {
+                logInfo("LORA", "max hops reached (%u), not relaying", (unsigned)p.hops);
+                return;
+            }
+
+            // increment hop count and resend
+            p.hops++;
+            char outbuf[256];
+            size_t outn = Shared::serializePayload(p, outbuf, sizeof(outbuf));
+            if (outn == 0)
+            {
+                logWarn("LORA", "failed to serialize for relay");
+                return;
+            }
+
+            bool ok = lora.send((const uint8_t *)outbuf, outn);
+            if (ok)
+            {
+                // store dedupe key hash so future copies of the same origin+payload are not re-relayed
+                relayCacheAdd(h);
+                logInfo("LORA", "relayed: %s", outbuf);
+            }
+            else
+            {
+                logWarn("LORA", "relay send failed");
+            } });
     }
 
     logInfo("TURB", "fixed mapping enabled: raw 1800 => 100%% clear");
@@ -393,6 +529,12 @@ void loop()
     logInfo("TURB", "raw=%d -> %.1f%% clear", val, pct);
     logAndSend("Turbidity raw", "turb_raw", val, "raw");
     logAndSend("Turbidity clear", "turb_pct", (int32_t)lroundf(pct), "%");
+
+#ifdef PH_SENSOR_PIN
+    int phVal = phSensor.readValue();
+    logInfo("PH", "raw=%d", phVal);
+    logAndSend("pH raw", "ph_raw", phVal, "raw");
+#endif
 
     if (adxlReady)
     {

@@ -1,11 +1,13 @@
 import time
 import random
+import json
 from typing import Dict, Any, Optional
 
 class SensorDataReader:
     """Abstract base class for reading sensor data."""
     def read_data(self) -> Optional[Dict[str, Any]]:
         raise NotImplementedError("Subclasses must implement read_data")
+
 
 class DummySensorReader(SensorDataReader):
     """Generates dummy water sensor data if hardware is not available."""
@@ -29,17 +31,48 @@ class DummySensorReader(SensorDataReader):
             "timestamp": time.time()
         }
 
+
 class LoraSensorReader(SensorDataReader):
-    """Reads sensor data via LoRa module."""
+    """Reads sensor data via LoRa module.
+
+    This implementation blocks waiting for a newline-terminated message from the serial
+    port and returns parsed JSON if possible. If `pyserial` is not installed or the
+    serial port cannot be opened, an informative exception is raised.
+    """
     def __init__(self, port: str, baudrate: int = 115200):
         self.port = port
         self.baudrate = baudrate
-        # Initialize serial connection here if hardware is present
-        # self.serial = serial.Serial(port, baudrate, timeout=1)
-        
+        try:
+            import serial
+        except Exception as e:
+            raise RuntimeError("pyserial is required for LoraSensorReader: install with 'pip install pyserial'") from e
+
+        try:
+            # Use blocking reads (timeout=None) so read() waits until data arrives
+            self.serial = serial.Serial(self.port, self.baudrate, timeout=None)
+        except Exception as e:
+            raise RuntimeError(f"Failed to open serial port {self.port}: {e}") from e
+
     def read_data(self) -> Optional[Dict[str, Any]]:
-        # In a real scenario, this would read from serial and parse the LoRa message
-        # For now, it will return dummy data to prevent failing if lora is missing
-        print(f"Reading from LoRa on {self.port}...")
-        # Simulating a failure or real read...
-        return None
+        # Read a line (blocking) from serial and attempt to parse as JSON
+        try:
+            raw = self.serial.readline()
+            if not raw:
+                return None
+            try:
+                text = raw.decode('utf-8', errors='replace').strip()
+            except Exception:
+                text = str(raw)
+
+            # Try to parse JSON first
+            try:
+                payload = json.loads(text)
+            except Exception:
+                # Return raw text under a key if JSON parsing fails
+                payload = {"raw": text}
+
+            payload.setdefault("timestamp", time.time())
+            return payload
+        except Exception as e:
+            print(f"Error while reading from LoRa serial: {e}")
+            return None

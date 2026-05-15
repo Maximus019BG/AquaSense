@@ -12,7 +12,12 @@ namespace Shared
         char id[16];
         char metric[16];
         int32_t value;
-        uint32_t ts; // epoch seconds
+        uint32_t seq; // per-origin sequence number
+        uint8_t hops; // number of relay hops the packet has taken
+        uint32_t ts;  // epoch seconds
+        // Optional signature field (hex or base64) for end-to-end authentication
+        // Stored as a null-terminated string. If empty, no signature present.
+        char sig[128];
     };
 
     // Serialize payload into a compact JSON-ish string into buffer.
