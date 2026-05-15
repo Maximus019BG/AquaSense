@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "~/server/db";
 import { waterReadingsTable } from "~/server/db/schema";
+import { validateSensorApiKey } from "~/lib/auth-sensor";
 
 export async function POST(request: NextRequest) {
   try {
+    const authError = validateSensorApiKey(request);
+    if (authError) return authError;
+
     const body = await request.json();
 
     const {

@@ -15,6 +15,20 @@
       "when": 1778707741036,
       "tag": "0001_keen_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778824600625,
+      "tag": "0002_confused_bug",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778827245344,
+      "tag": "0003_flawless_maginty",
+      "breakpoints": true
     }
   ]
 }

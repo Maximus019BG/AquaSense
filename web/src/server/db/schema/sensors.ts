@@ -1,7 +1,7 @@
-import { pgTable, uuid, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const sensorsTable = pgTable("sensors", {
-  id: uuid("id").defaultRandom().primaryKey(),
+  id: text("id").primaryKey(),
   name: text("name").notNull(),
   type: text("type").notNull(),
   status: text("status").default("online"),
