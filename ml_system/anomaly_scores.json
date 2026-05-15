@@ -1,0 +1,52 @@
+[
+  {
+    "temperature": 10.0,
+    "score": -0.642420549341683,
+    "is_anomaly": true
+  },
+  {
+    "temperature": 12.777777777777779,
+    "score": -0.6405725305978556,
+    "is_anomaly": true
+  },
+  {
+    "temperature": 15.555555555555555,
+    "score": -0.6288208499711457,
+    "is_anomaly": true
+  },
+  {
+    "temperature": 18.333333333333332,
+    "score": -0.633057250393526,
+    "is_anomaly": true
+  },
+  {
+    "temperature": 21.11111111111111,
+    "score": -0.6330413827116678,
+    "is_anomaly": true
+  },
+  {
+    "temperature": 23.88888888888889,
+    "score": -0.6448906718602742,
+    "is_anomaly": true
+  },
+  {
+    "temperature": 26.666666666666664,
+    "score": -0.6545320713408,
+    "is_anomaly": true
+  },
+  {
+    "temperature": 29.444444444444443,
+    "score": -0.667819624772151,
+    "is_anomaly": true
+  },
+  {
+    "temperature": 32.22222222222222,
+    "score": -0.667819624772151,
+    "is_anomaly": true
+  },
+  {
+    "temperature": 35.0,
+    "score": -0.667819624772151,
+    "is_anomaly": true
+  }
+]

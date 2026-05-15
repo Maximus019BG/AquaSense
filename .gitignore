@@ -45,5 +45,7 @@ yarn-error.log*
 # idea files
 .idea
 
-# Claude Code local config
+
+
 .claude
+.pio/
