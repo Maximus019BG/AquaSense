@@ -45,7 +45,13 @@ yarn-error.log*
 # idea files
 .idea
 
-
-
+# Claude Code local config
 .claude
-.pio/
+
+# Windows OS artifacts
+Thumbs.db
+desktop.ini
+*.lnk
+
+# Stray accidental files
+,
