@@ -42,22 +42,22 @@ function ForecastRow({ item }: { item: ForecastItem }) {
   const TrendIcon =
     change > 0 ? TrendingUp : change < 0 ? TrendingDown : Minus;
   const trendColor =
-    change > 0 ? "text-green-400" : change < 0 ? "text-red-400" : "text-gray-400";
+    change > 0 ? "text-emerald-300" : change < 0 ? "text-rose-300" : "text-slate-400";
 
   return (
-    <div className="flex items-center justify-between py-3 border-b border-[#334155] last:border-0">
+    <div className="flex items-center justify-between border-b border-white/10 py-3 last:border-0">
       <div>
-        <p className="text-sm text-gray-300">{item.parameter}</p>
-        <p className="text-xs text-gray-500">Confidence: {item.confidence}%</p>
+        <p className="text-sm text-slate-200">{item.parameter}</p>
+        <p className="text-xs text-slate-500">Confidence: {item.confidence}%</p>
       </div>
 
       <div className="text-right">
-        <p className="text-sm font-mono text-white">
+        <p className="font-mono text-sm text-white">
           {item.predicted.toFixed(1)}
           {item.unit}
         </p>
         <div className={cn("flex items-center gap-1 text-xs", trendColor)}>
-          <TrendIcon className="w-3 h-3" />
+          <TrendIcon className="h-3 w-3" />
           <span>
             {change > 0 ? "+" : ""}
             {changePercent}%
@@ -70,31 +70,28 @@ function ForecastRow({ item }: { item: ForecastItem }) {
 
 export function ForecastPanel() {
   return (
-    <div className="p-5 bg-[#132F4C] border border-[#334155] rounded-xl">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="p-1.5 bg-purple-500/20 rounded">
-          <Brain className="w-4 h-4 text-purple-400" />
+    <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+      <div className="mb-4 flex items-center gap-2">
+        <div className="rounded-lg bg-cyan-400/10 p-1.5">
+          <Brain className="h-4 w-4 text-cyan-300" />
         </div>
         <div>
           <h3 className="text-sm font-semibold text-white">24h Forecast</h3>
-          <p className="text-xs text-gray-500">AI-Powered LSTM Model</p>
+          <p className="text-xs text-slate-500">AI-powered LSTM model</p>
         </div>
       </div>
 
-      {/* Forecast List */}
       <div className="space-y-1 mb-4">
         {forecasts.map((item) => (
           <ForecastRow key={item.parameter} item={item} />
         ))}
       </div>
 
-      {/* Actions */}
       <div className="flex gap-2">
-        <button className="flex-1 px-3 py-2 text-xs border border-[#334155] rounded hover:bg-white/5 transition-colors">
+        <button className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-200 transition-colors hover:border-cyan-400/30 hover:bg-white/5">
           View Report
         </button>
-        <button className="flex-1 px-3 py-2 text-xs border border-[#334155] rounded hover:bg-white/5 transition-colors">
+        <button className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-200 transition-colors hover:border-emerald-400/30 hover:bg-white/5">
           Export
         </button>
       </div>

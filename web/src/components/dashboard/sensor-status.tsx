@@ -85,8 +85,8 @@ export function SensorStatus({ sensors }: SensorStatusProps) {
   };
 
   return (
-    <div className="p-4 bg-[#132F4C] border border-[#334155] rounded-xl">
-      <h3 className="text-sm font-semibold text-white mb-4">Sensor Status</h3>
+    <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.25)]">
+      <h3 className="mb-4 text-sm font-semibold text-white">Sensor Status</h3>
 
       <div className="space-y-3">
         {sensorItems.map((sensor) => {
@@ -99,15 +99,15 @@ export function SensorStatus({ sensors }: SensorStatusProps) {
           return (
             <div
               key={sensor.id}
-              className="flex items-center justify-between p-2 rounded-lg bg-[#0A1929]/50"
+              className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-2.5"
             >
               <div className="flex items-center gap-3">
-                <div className="p-1.5 bg-[#1E4976] rounded">
-                  <sensor.Icon className="w-4 h-4 text-gray-300" />
+                <div className="rounded-lg bg-cyan-400/10 p-1.5">
+                  <sensor.Icon className="h-4 w-4 text-cyan-200" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-200">{sensor.name}</p>
-                  <p className="text-xs text-gray-500 font-mono">
+                  <p className="text-sm text-slate-200">{sensor.name}</p>
+                  <p className="font-mono text-xs text-slate-500">
                     {displayValue}
                     {sensor.unit}
                   </p>
@@ -116,8 +116,8 @@ export function SensorStatus({ sensors }: SensorStatusProps) {
 
               <Wifi
                 className={cn(
-                  "w-4 h-4",
-                  isOnline ? "text-green-500" : "text-red-500"
+                  "h-4 w-4",
+                  isOnline ? "text-emerald-400" : "text-rose-400"
                 )}
               />
             </div>

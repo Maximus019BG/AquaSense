@@ -1,24 +1,32 @@
-// src/middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyAccessToken } from "~/lib/auth";
 
-export async function middleware(req: NextRequest) {
+const publicPathPrefixes = ["/_next", "/api/auth", "/api/data", "/api/water-data", "/api/readings", "/public"];
+const publicPaths = new Set(["/login", "/register"]);
+
+export async function proxy(req: NextRequest) {
   const url = req.nextUrl.clone();
   const session = req.cookies.get("session")?.value;
-  // allow public paths
-  if (url.pathname.startsWith("/_next") || url.pathname.startsWith("/api/auth") || url.pathname.startsWith("/api/data") || url.pathname.startsWith("/api/water-data") || url.pathname.startsWith("/api/readings") || url.pathname.startsWith("/public") || url.pathname === "/login" || url.pathname === "/register") {
+
+  if (publicPathPrefixes.some((prefix) => url.pathname.startsWith(prefix)) || publicPaths.has(url.pathname)) {
     return NextResponse.next();
   }
+
   if (!session) {
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
+
   const { valid } = await verifyAccessToken(session);
   if (!valid) {
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
+
   return NextResponse.next();
 }
-export const config = { matcher: ["/((?!api/auth|_next|favicon.ico).*)"] };
+
+export const config = {
+  matcher: ["/((?!api/auth|_next|favicon.ico).*)"],
+};

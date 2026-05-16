@@ -75,13 +75,13 @@ function MiniChart({
   data: { time: string; value: number }[];
 }) {
   return (
-    <div className="p-4 bg-[#132F4C] border border-[#334155] rounded-xl">
+    <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.25)]">
       <div className="flex items-center justify-between mb-4">
-        <h4 className="text-sm font-medium text-gray-300">{config.title}</h4>
-        <span className="text-xs text-gray-500">{config.unit}</span>
+        <h4 className="text-sm font-medium text-slate-200">{config.title}</h4>
+        <span className="text-xs text-slate-500">{config.unit}</span>
       </div>
 
-      <div className="h-32">
+      <div className="h-36">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>
@@ -106,18 +106,18 @@ function MiniChart({
             </defs>
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="#334155"
-              opacity={0.5}
+              stroke="#24384d"
+              opacity={0.45}
             />
             <XAxis dataKey="time" hide />
             <YAxis domain={[config.min, config.max]} hide />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#132F4C",
-                border: "1px solid #334155",
+                backgroundColor: "#07111b",
+                border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: "8px",
               }}
-              labelStyle={{ color: "#94A3B8" }}
+              labelStyle={{ color: "#9fb3c8" }}
               itemStyle={{ color: config.color }}
             />
             <Area
@@ -147,9 +147,8 @@ export function ChartSection() {
           : 84;
 
   return (
-    <div className="p-6 bg-[#132F4C] border border-[#334155] rounded-xl">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.3)]">
+      <div className="mb-6 flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white">Live Charts</h3>
 
         <div className="flex gap-1">
@@ -158,10 +157,10 @@ export function ChartSection() {
               key={range}
               onClick={() => setActiveRange(range)}
               className={cn(
-                "px-3 py-1 text-xs rounded transition-colors",
+                "rounded-full px-3 py-1 text-xs transition-colors",
                 activeRange === range
-                  ? "bg-[#00BCD4]/20 text-[#00BCD4]"
-                  : "text-gray-400 hover:text-white hover:bg-white/5"
+                  ? "bg-emerald-400/15 text-emerald-200"
+                  : "text-slate-400 hover:bg-white/5 hover:text-white"
               )}
             >
               {range}
@@ -170,8 +169,7 @@ export function ChartSection() {
         </div>
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
         {chartConfigs.map((config) => (
           <MiniChart
             key={config.id}

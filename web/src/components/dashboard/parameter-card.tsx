@@ -31,38 +31,35 @@ export function ParameterCard({
   };
 
   return (
-    <div className="p-5 bg-[#132F4C] border border-[#334155] rounded-xl hover:scale-[1.02] transition-transform duration-200">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-5 transition-transform duration-200 hover:-translate-y-0.5 hover:border-emerald-400/20 hover:shadow-[0_18px_50px_rgba(0,0,0,0.35)]">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div
-            className="p-2 rounded-lg"
-            style={{ backgroundColor: `${color}20` }}
+            className="rounded-xl p-2"
+            style={{ backgroundColor: `${color}18` }}
           >
-            <Icon className="w-5 h-5" style={{ color }} />
+            <Icon className="h-5 w-5" style={{ color }} />
           </div>
-          <span className="text-sm font-medium text-gray-300">{title}</span>
+          <span className="text-sm font-medium text-slate-300">{title}</span>
         </div>
-        <div className={cn("w-2.5 h-2.5 rounded-full", statusColors[status])} />
+        <div className={cn("h-2.5 w-2.5 rounded-full shadow-[0_0_16px_currentColor]", statusColors[status])} />
       </div>
 
-      {/* Value */}
       <div className="mb-3">
-        <span className="text-3xl font-bold font-mono text-white">
+        <span className="font-mono text-3xl font-bold text-white">
           {value.toFixed(1)}
         </span>
-        <span className="text-lg text-gray-400 ml-1">{unit}</span>
+        <span className="ml-1 text-lg text-slate-400">{unit}</span>
       </div>
 
-      {/* Range & Trend */}
       <div className="space-y-1">
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-slate-500">
           Normal range: {range.min}-{range.max}{unit}
         </p>
         <p
           className={cn(
             "text-xs font-medium",
-            trend > 0 ? "text-green-400" : trend < 0 ? "text-red-400" : "text-gray-400"
+            trend > 0 ? "text-emerald-300" : trend < 0 ? "text-rose-300" : "text-slate-400"
           )}
         >
           {trend > 0 ? "↑" : trend < 0 ? "↓" : "→"} {Math.abs(trend).toFixed(1)}

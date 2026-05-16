@@ -232,19 +232,19 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="grid grid-cols-12 gap-6">
-      <div className="col-span-2">
+    <div className="grid grid-cols-12 gap-5 xl:gap-6">
+      <div className="col-span-12 space-y-5 lg:col-span-3 xl:col-span-3">
         <SensorStatus sensors={sensors} />
 
-        <div className="mt-6">
+        <div>
           <AlertTimeline alerts={mockAlerts} />
         </div>
       </div>
 
-      <div className="col-span-7">
+      <div className="col-span-12 lg:col-span-6 xl:col-span-6">
         <div
-          className="bg-[#132F4C] rounded-xl border border-[#334155] overflow-hidden relative"
-          style={{ height: "480px" }}
+          className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
+          style={{ height: "500px" }}
         >
           <WaterScene
             turbidity={sensorData.turbidity}
@@ -273,14 +273,14 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="absolute top-2.5 right-3 z-20 flex items-center gap-1.5 bg-[rgba(10,25,41,0.8)] border border-[rgba(0,188,212,0.15)] rounded-full px-3 py-1.5">
+          <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-full border border-emerald-400/15 bg-slate-950/75 px-3 py-1.5 backdrop-blur-xl">
             <div className="w-1.5 h-1.5 rounded-full bg-[#4CAF50] animate-pulse" />
             <span className="text-[10px] text-[#94A3B8] font-mono">
               LIVE · sync {syncAgo}s ago
             </span>
           </div>
 
-          <div className="absolute top-2.5 left-3 z-20 flex items-center gap-2 bg-[rgba(10,25,41,0.8)] border border-[rgba(255,193,7,0.15)] rounded-full px-3 py-1.5">
+          <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full border border-cyan-400/15 bg-slate-950/75 px-3 py-1.5 backdrop-blur-xl">
             {timeOfDay >= 6 && timeOfDay < 20 ? (
               <Sun size={14} color="#FFD700" />
             ) : (
@@ -300,7 +300,7 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 text-[9px] text-[#475569]">
+          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 text-[9px] text-slate-500">
             <span> BLACK SEA DIGITAL TWIN</span>
             <span className="mx-1">|</span>
             <span>Depth: ~2215m max</span>
@@ -314,20 +314,24 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="col-span-3 space-y-4">
+      <div className="col-span-12 space-y-4 lg:col-span-3 xl:col-span-3">
         {parameters.map((param) => (
           <ParameterCard key={param.id} {...param} />
         ))}
-
-        <ForecastPanel />
       </div>
 
-      <div className="col-span-12 mt-8">
-        <div className="bg-[#1E293B] rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Prediction Form
-          </h2>
-          <PredictionForm />
+      <div className="col-span-12 grid gap-5 lg:grid-cols-12">
+        <div className="lg:col-span-3">
+          <ForecastPanel />
+        </div>
+
+        <div className="lg:col-span-9">
+          <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-6">
+            <h2 className="mb-4 text-lg font-semibold text-white">
+              Prediction Form
+            </h2>
+            <PredictionForm />
+          </div>
         </div>
       </div>
     </div>

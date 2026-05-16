@@ -25,18 +25,18 @@ const alertStyles = {
 
 export function AlertTimeline({ alerts }: AlertTimelineProps) {
   return (
-    <div className="bg-[#132F4C] rounded-xl border border-[#334155] p-4">
-      <h3 className="text-sm font-semibold text-white mb-4">Alert Timeline</h3>
+    <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.25)]">
+      <h3 className="mb-4 text-sm font-semibold text-white">Alert Timeline</h3>
 
-      <div className="h-[400px] overflow-y-auto">
+      <div className="h-[400px] overflow-y-auto pr-1">
         <div className="space-y-3">
           {alerts.map((alert) => (
             <div
               key={alert.id}
               className={cn(
-                "p-3 rounded-lg border transition-all hover:translate-x-1",
+                "rounded-xl border p-3 transition-all hover:-translate-y-0.5 hover:border-white/20",
                 alertStyles[alert.type].border,
-                "bg-[#0A1929]/50"
+                "bg-white/5"
               )}
             >
               <div className="flex items-center gap-2 mb-1">
@@ -50,9 +50,9 @@ export function AlertTimeline({ alerts }: AlertTimelineProps) {
                 </span>
               </div>
 
-              <p className="text-sm text-gray-200 mb-1">{alert.message}</p>
+              <p className="mb-1 text-sm text-slate-200">{alert.message}</p>
 
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-slate-500">
                 {formatDistanceToNow(alert.timestamp, { addSuffix: true })} •{" "}
                 {alert.parameter}: {alert.value}
               </p>

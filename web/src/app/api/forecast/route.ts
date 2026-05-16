@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 const FALLBACK_CSV_PATH = path.resolve(process.cwd(), "..", "docs", "data", "processed", "burgas_final.csv");
 
-const MAX_FORECAST_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -63,10 +62,6 @@ function parseForecastSpec(period: string): ForecastSpec {
   };
 
   const totalDays = amount * unitToDays[unit];
-
-  if (totalDays > MAX_FORECAST_DAYS) {
-    throw new Error(`Maximum forecast horizon is 1 year. Requested: ${amount}${unit}`);
-  }
 
   const dailySteps = Math.max(1, Math.ceil(totalDays));
 

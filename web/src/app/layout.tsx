@@ -28,12 +28,12 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${jetbrains.variable} ${spaceGrotesk.variable}`}
     >
-      <body className="font-sans">
-        <div className="bg-ocean-deep min-h-screen text-white">
+      <body className="font-sans antialiased">
+        <div className="min-h-screen text-white">
           <Header />
           <div className="flex">
             <Sidebar />
-            <main className="flex-1 p-6">{children}</main>
+            <main className="relative flex-1 overflow-hidden p-4 sm:p-6 lg:p-8">{children}</main>
           </div>
         </div>
       </body>
