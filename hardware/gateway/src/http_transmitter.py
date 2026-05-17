@@ -20,7 +20,7 @@ class HttpTransmitter(DataTransmitter):
                 self.server_url, 
                 headers=self.headers, 
                 data=json.dumps(data),
-                timeout=10
+                timeout=5
             )
             response.raise_for_status()
             print(f"Data transmitted successfully to {self.server_url}")

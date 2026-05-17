@@ -42,7 +42,7 @@ def main():
     # If USE_DUMMY_DATA is set to "true", force dummy polling mode;
     # otherwise attempt to use the LoRa reader and fall back to dummy polling.
     USE_DUMMY_DATA = os.environ.get("USE_DUMMY_DATA", "false").lower() == "true"
-    INTERVAL_SECONDS = int(os.environ.get("INTERVAL_SECONDS", "60"))
+    INTERVAL_SECONDS = int(os.environ.get("INTERVAL_SECONDS", "1"))
     DEVICE_KEY = os.environ.get("DEVICE_KEY", "default-device-key")
     # If true, accept LoRa messages without Ed25519 signatures (raw LoRa)
     ALLOW_RAW_LORA = os.environ.get("ALLOW_RAW_LORA", "false").lower() == "true"
