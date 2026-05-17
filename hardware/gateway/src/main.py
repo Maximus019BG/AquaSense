@@ -18,6 +18,8 @@ def main():
     USE_DUMMY_DATA = os.environ.get("USE_DUMMY_DATA", "false").lower() == "true"
     INTERVAL_SECONDS = int(os.environ.get("INTERVAL_SECONDS", "60"))
     DEVICE_KEY = os.environ.get("DEVICE_KEY", "default-device-key")
+    # If true, accept LoRa messages without Ed25519 signatures (raw LoRa)
+    ALLOW_RAW_LORA = os.environ.get("ALLOW_RAW_LORA", "false").lower() == "true"
     HOPS_WINDOW_SECONDS = float(os.environ.get("HOPS_WINDOW_SECONDS", "2.0"))
 
     transmitter = HttpTransmitter(SERVER_URL)
@@ -60,18 +62,17 @@ def main():
                 # Determine timestamp for dedup checks
                 ts = float(data.get("timestamp", time.time()))
 
-                # Verify incoming Ed25519 signature if present
-                # Expect clients to include a base64 signature field in the payload named "sig"
+                # Optionally verify incoming Ed25519 signature if present.
+                # Expect clients to include a base64 signature field in the payload named "sig".
                 pubkeys = load_pubkeys()
                 sig_b64 = None
                 if "sig" in data:
                     sig_b64 = data.pop("sig")
                 device_id = data.get("id") or data.get("device_id") or data.get("deviceId")
+
                 if sig_b64 and device_id:
                     # Recreate canonical message bytes: stable JSON with keys sorted
                     try:
-                        # Build canonical message bytes using the shared protocol ordering
-                        # same as Shared::serializePayload: id, metric, value, seq, hops, ts
                         idv = data.get("id", "")
                         metricv = data.get("metric", "")
                         valuev = int(data.get("value", 0))
@@ -82,17 +83,26 @@ def main():
                         canonical = canonical_str.encode('utf-8')
                         ok = verify_message(device_id, canonical, sig_b64, pubkeys=pubkeys)
                         if not ok:
-                            print(f"Signature verification failed for device_id={device_id}; dropping message")
-                            continue
+                            if not ALLOW_RAW_LORA:
+                                print(f"Signature verification failed for device_id={device_id}; dropping message")
+                                continue
+                            else:
+                                print(f"Signature verification failed for device_id={device_id}, but ALLOW_RAW_LORA enabled — accepting raw message")
                         else:
                             print(f"Signature verified for device_id={device_id}")
                     except Exception as e:
-                        print(f"Error verifying signature: {e}")
-                        continue
+                        if not ALLOW_RAW_LORA:
+                            print(f"Error verifying signature: {e}")
+                            continue
+                        else:
+                            print(f"Error verifying signature ({e}), but ALLOW_RAW_LORA enabled — accepting raw message")
                 else:
-                    # If no signature present, reject by default (only accept signed messages)
-                    print("No signature present or missing device id; dropping message")
-                    continue
+                    # If no signature present, optionally accept raw LoRa messages if configured
+                    if not ALLOW_RAW_LORA:
+                        print("No signature present or missing device id; dropping message")
+                        continue
+                    else:
+                        print("No signature present; ALLOW_RAW_LORA enabled — accepting raw LoRa message")
 
                 # Extract buoy_id from expected device identifier fields in LoRa payload
                 buoy_id = data.get("device_id") or data.get("deviceId") or data.get("device") or data.get("dev_id")
