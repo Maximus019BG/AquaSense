@@ -24,10 +24,12 @@ async function getFallbackReading() {
     success: true,
     data: {
       temperature: Number(row.temperature_C),
-      ph: Number(row.salinity_psu),
-      turbidity: Number(row.primary_production),
+      ph: Number(row.ph),
+      turbidity: Number(row.turbidity_kd),
       dissolvedOxygen: Number(row.dissolved_o2),
       waterLevel: Number(row.sea_level_m),
+      salinity: Number(row.salinity_psu),
+      currentSpeed: Number(row.current_speed_m_s),
       timestamp: row.time,
       source: "fallback_csv",
     },
@@ -95,6 +97,8 @@ export async function GET() {
         turbidity: Number(data.turbidity),
         dissolvedOxygen: Number(data.dissolved_oxygen),
         waterLevel: Number(data.water_level),
+        salinity: null,
+        currentSpeed: null,
         timestamp: data.created_at,
       },
     });

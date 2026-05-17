@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { ParameterCard } from "~/components/dashboard/parameter-card";
 import { AlertTimeline } from "~/components/dashboard/alert-timeline";
 import { ChartSection } from "~/components/dashboard/chart-section";
-import { ForecastPanel } from "~/components/dashboard/forecast-panel";
 import { WaterScene } from "~/components/visualization/water-scene";
 import { SensorStatus } from "~/components/dashboard/sensor-status";
 import {
@@ -17,7 +16,6 @@ import {
   Moon,
 } from "lucide-react";
 import type { Alert } from "~/types";
-import PredictionForm from "~/components/prediction/PredictionForm";
 
 interface SensorValues {
   temperature: number;
@@ -320,20 +318,6 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="col-span-12 grid gap-5 lg:grid-cols-12">
-        <div className="lg:col-span-3">
-          <ForecastPanel />
-        </div>
-
-        <div className="lg:col-span-9">
-          <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-6">
-            <h2 className="mb-4 text-lg font-semibold text-white">
-              Prediction Form
-            </h2>
-            <PredictionForm />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

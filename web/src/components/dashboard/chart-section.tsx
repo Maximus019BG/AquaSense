@@ -58,12 +58,28 @@ const chartConfigs = [
     max: 12,
   },
   {
+    id: "salinity",
+    title: "Salinity",
+    color: "#A78BFA",
+    unit: "PSU",
+    min: 16,
+    max: 22,
+  },
+  {
+    id: "current",
+    title: "Current Speed",
+    color: "#60A5FA",
+    unit: "m/s",
+    min: 0,
+    max: 0.6,
+  },
+  {
     id: "level",
-    title: "Water Level",
+    title: "Sea Level",
     color: "#6C5CE7",
-    unit: "cm",
-    min: 200,
-    max: 300,
+    unit: "m",
+    min: 0.2,
+    max: 0.5,
   },
 ];
 
@@ -169,7 +185,7 @@ export function ChartSection() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-7">
         {chartConfigs.map((config) => (
           <MiniChart
             key={config.id}

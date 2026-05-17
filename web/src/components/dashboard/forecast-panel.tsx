@@ -33,6 +33,34 @@ const forecasts: ForecastItem[] = [
     unit: "NTU",
     confidence: 88,
   },
+  {
+    parameter: "Dissolved O2",
+    current: 8.5,
+    predicted: 7.9,
+    unit: "mg/L",
+    confidence: 92,
+  },
+  {
+    parameter: "Salinity",
+    current: 18.4,
+    predicted: 18.6,
+    unit: "PSU",
+    confidence: 90,
+  },
+  {
+    parameter: "Current Speed",
+    current: 0.18,
+    predicted: 0.21,
+    unit: "m/s",
+    confidence: 86,
+  },
+  {
+    parameter: "Sea Level",
+    current: 0.32,
+    predicted: 0.35,
+    unit: "m",
+    confidence: 93,
+  },
 ];
 
 function ForecastRow({ item }: { item: ForecastItem }) {

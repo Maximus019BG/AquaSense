@@ -3,15 +3,41 @@ import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 
 const FALLBACK_CSV_PATH = path.resolve(process.cwd(), "..", "docs", "data", "processed", "burgas_final.csv");
+const LSTM_FORECAST_PATH = path.resolve(
+  process.cwd(),
+  "..",
+  "ml_system",
+  "models",
+  "artifacts",
+  "lstm_forecaster",
+  "lstm_forecaster_forecast.json",
+);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
+
+const FEATURE_KEYS = [
+  "sea_level_m",
+  "temperature_C",
+  "dissolved_o2",
+  "salinity_psu",
+  "current_speed_m_s",
+  "ph",
+  "turbidity_kd",
+];
 
 type ForecastCadence = "hourly" | "daily" | "weekly" | "monthly";
 
 type ForecastPoint = {
   timestamp: string;
   features: Record<string, number>;
+  is_anomaly?: boolean;
+  score?: number;
+};
+
+type AnomalyPrediction = {
+  is_anomaly?: boolean;
+  score?: number;
 };
 
 type ForecastSpec = {
@@ -92,6 +118,55 @@ function parsePeriodToSteps(period: string): number {
   return parseForecastSpec(period).dailySteps;
 }
 
+async function annotateForecastWithAnomalies(predictions: ForecastPoint[]) {
+  const inferenceBase = (process.env.INFERENCE_URL || "http://localhost:8000").replace(/\/(predict|forecast)$/, "");
+  const inferenceUrl = `${inferenceBase}/predict`;
+
+  const series = predictions.map((point) => ({
+    timestamp: point.timestamp,
+    temperature_C: point.features.temperature_C,
+    dissolved_o2: point.features.dissolved_o2,
+    salinity_psu: point.features.salinity_psu,
+    sea_level_m: point.features.sea_level_m,
+  }));
+
+  try {
+    const response = await fetch(inferenceUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "inline", series }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Anomaly check failed with status ${response.status}`);
+    }
+
+    const data = (await response.json()) as { predictions?: AnomalyPrediction[] };
+    const anomalyRows = Array.isArray(data.predictions) ? data.predictions : [];
+
+    return predictions.map((point, index) => ({
+      ...point,
+      is_anomaly: Boolean(anomalyRows[index]?.is_anomaly),
+      score: Number(anomalyRows[index]?.score ?? 0),
+    }));
+  } catch {
+    return predictions.map((point) => ({
+      ...point,
+      is_anomaly: false,
+      score: 0,
+    }));
+  }
+}
+
+async function loadSavedLstmForecast() {
+  const raw = await readFile(LSTM_FORECAST_PATH, "utf-8");
+  const data = JSON.parse(raw) as { predictions?: ForecastPoint[]; feature_columns?: string[] };
+  return {
+    predictions: Array.isArray(data.predictions) ? data.predictions : [],
+    featureKeys: Array.isArray(data.feature_columns) ? data.feature_columns : FEATURE_KEYS,
+  };
+}
+
 function interpolateValues(start: Record<string, number>, end: Record<string, number>, ratio: number) {
   return Object.fromEntries(
     Object.keys(start).map((key) => {
@@ -119,20 +194,10 @@ function addSeasonality(
 }
 
 function getSeriesAnchors(seedRows: Array<Record<string, string>>, baseForecast: { predictions: ForecastPoint[] }) {
-  const featureKeys = [
-    "sea_level_m",
-    "temperature_C",
-    "dissolved_o2",
-    "primary_production",
-    "salinity_psu",
-    "nitrate",
-    "phosphate",
-  ];
-
   const latest = seedRows[seedRows.length - 1] ?? {};
   const latestTime = latest.time ? new Date(latest.time) : new Date();
   const startFeatures = Object.fromEntries(
-    featureKeys.map((key) => [key, Number(latest[key] ?? 0)]),
+    FEATURE_KEYS.map((key) => [key, Number(latest[key] ?? 0)]),
   ) as Record<string, number>;
 
   const anchors: Array<{ timestamp: Date; features: Record<string, number> }> = [
@@ -140,7 +205,7 @@ function getSeriesAnchors(seedRows: Array<Record<string, string>>, baseForecast:
     ...baseForecast.predictions.map((point) => ({ timestamp: new Date(point.timestamp), features: point.features })),
   ];
 
-  return { anchors, featureKeys, latestTime };
+  return { anchors, featureKeys: FEATURE_KEYS, latestTime };
 }
 
 function sampleAnchorsAt(targetTime: Date, anchors: Array<{ timestamp: Date; features: Record<string, number> }>) {
@@ -277,15 +342,7 @@ function lastDelta(values: number[]) {
 function buildLocalForecast(period: string, seedRows: Array<Record<string, string>>) {
   const spec = parseForecastSpec(period);
   const steps = spec.dailySteps;
-  const featureKeys = [
-    "sea_level_m",
-    "temperature_C",
-    "dissolved_o2",
-    "primary_production",
-    "salinity_psu",
-    "nitrate",
-    "phosphate",
-  ];
+  const featureKeys = FEATURE_KEYS;
 
   // Use all available history for pattern analysis
   const seriesByFeature = Object.fromEntries(
@@ -398,56 +455,43 @@ export async function POST(request: NextRequest) {
     const period = body.period || "7d";
     const spec = parseForecastSpec(period);
 
-    const inferenceBase = (process.env.INFERENCE_URL || "http://localhost:8000").replace(/\/(predict|forecast)$/, "");
-    const forecastUrl = `${inferenceBase}/forecast`;
-
     try {
-      const resp = await fetch(forecastUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ period: `${spec.dailySteps}d` }),
-      });
-
-      if (!resp.ok) {
-        throw new Error(`inference service returned ${resp.status}`);
+      const saved = await loadSavedLstmForecast();
+      const predictions = await annotateForecastWithAnomalies(saved.predictions.slice(0, spec.dailySteps));
+      if (predictions.length === 0) {
+        throw new Error("no_saved_lstm_forecast");
       }
 
-      const data = await resp.json();
-      const seedRows = await loadSeedRows(Math.max(30, spec.dailySteps + 1));
-      const detailed = buildDetailedForecast(data, seedRows, spec);
-      return new NextResponse(JSON.stringify({
-        ...data,
+      return NextResponse.json({
+        success: true,
+        model_version: "saved_lstm_forecast",
         period,
-        detail_cadence: detailed.cadence,
-        predictions: detailed.points,
-        steps: detailed.points.length,
+        steps: predictions.length,
+        detail_cadence: "daily",
+        predictions,
         summary: {
-          ...(data.summary ?? {}),
-          n_points: detailed.points.length,
-          detail_cadence: detailed.cadence,
-          start_timestamp: detailed.points[0]?.timestamp ?? null,
-          end_timestamp: detailed.points[detailed.points.length - 1]?.timestamp ?? null,
+          n_points: predictions.length,
+          detail_cadence: "daily",
+          start_timestamp: predictions[0]?.timestamp ?? null,
+          end_timestamp: predictions[predictions.length - 1]?.timestamp ?? null,
         },
-      }), {
-        status: resp.status,
-        headers: { "Content-Type": "application/json" },
       });
     } catch {
       const seedRows = await loadSeedRows(Math.max(30, spec.dailySteps + 1));
       const baseForecast = buildLocalForecast(`${spec.dailySteps}d`, seedRows);
-      const detailed = buildDetailedForecast(baseForecast, seedRows, spec);
-
+      const predictions = await annotateForecastWithAnomalies(baseForecast.predictions);
       return NextResponse.json({
         ...baseForecast,
+        predictions,
         period,
-        detail_cadence: detailed.cadence,
-        predictions: detailed.points,
-        steps: detailed.points.length,
+        detail_cadence: "daily",
+        steps: predictions.length,
         summary: {
-          n_points: detailed.points.length,
-          detail_cadence: detailed.cadence,
-          start_timestamp: detailed.points[0]?.timestamp ?? null,
-          end_timestamp: detailed.points[detailed.points.length - 1]?.timestamp ?? null,
+          n_points: predictions.length,
+          detail_cadence: "daily",
+          start_timestamp: predictions[0]?.timestamp ?? null,
+          end_timestamp: predictions[predictions.length - 1]?.timestamp ?? null,
+          anomaly_count: predictions.filter((point) => point.is_anomaly).length,
         },
       });
     }
