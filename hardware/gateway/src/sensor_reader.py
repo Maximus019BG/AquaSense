@@ -34,30 +34,33 @@ class DummySensorReader(SensorDataReader):
 class LoraSensorReader(SensorDataReader):
     """Reads sensor data via LoRa module.
 
-    This implementation blocks waiting for a newline-terminated message from the serial
-    port and returns parsed JSON if possible. If `pyserial` is not installed or the
-    serial port cannot be opened, an informative exception is raised.
+    This implementation reads framed packets from a serial-connected LoRa receiver.
+    It does not require newline-terminated messages, because LoRa payloads are packet-
+    framed rather than line-framed. If `pyserial` is not installed or the serial port
+    cannot be opened, an informative exception is raised.
     """
-    def __init__(self, port: str, baudrate: int = 115200):
+    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 1.0):
         self.port = port
         self.baudrate = baudrate
+        self.timeout = timeout
         try:
             import serial
         except Exception as e:
             raise RuntimeError("pyserial is required for LoraSensorReader: install with 'pip install pyserial'") from e
 
         try:
-            # Use blocking reads (timeout=None) so read() waits until data arrives
-            self.serial = serial.Serial(self.port, self.baudrate, timeout=None)
+            # Use a finite timeout so we can return control if no packet is available.
+            self.serial = serial.Serial(self.port, self.baudrate, timeout=timeout)
         except Exception as e:
             raise RuntimeError(f"Failed to open serial port {self.port}: {e}") from e
 
     def read_data(self) -> Optional[Dict[str, Any]]:
-        # Read a line (blocking) from serial and attempt to parse as JSON
+        # Read whatever bytes are currently available and attempt to parse them as JSON.
         try:
-            raw = self.serial.readline()
+            raw = self.serial.read_all()
             if not raw:
                 return None
+
             try:
                 text = raw.decode('utf-8', errors='replace').strip()
             except Exception:
@@ -68,7 +71,7 @@ class LoraSensorReader(SensorDataReader):
                 payload = json.loads(text)
             except Exception:
                 # Return raw text under a key if JSON parsing fails
-                payload = {"raw": text}
+                payload = {"raw": text, "raw_bytes": list(raw)}
 
             payload.setdefault("timestamp", time.time())
             return payload
