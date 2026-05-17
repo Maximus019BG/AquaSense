@@ -29,11 +29,29 @@
   /* Border Colors */
   --color-border-default: #1f3346;
   --color-border-light: #2f4a63;
+
+  --background: var(--background);
+  --foreground: var(--foreground);
 }
 
 :root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --color-border-default: #e2e8f0;
+  --color-surface-dark: #f1f5f9;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+}
+
+.dark {
   --background: #050912;
   --foreground: #FFFFFF;
+  --color-border-default: #1f3346;
+  --color-surface-dark: #0b1622;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #9fb3c8;
+  --color-text-muted: #6b85a3;
 }
 
 @layer base {
@@ -42,12 +60,17 @@
   }
   
   body {
+    background-color: var(--background);
+    color: var(--foreground);
+    @apply transition-colors duration-300;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  .dark body {
     background:
       radial-gradient(circle at top, rgba(0, 255, 168, 0.08), transparent 30%),
       radial-gradient(circle at right top, rgba(34, 211, 238, 0.12), transparent 25%),
       linear-gradient(180deg, #050912 0%, #07101c 100%);
-    color: #FFFFFF;
-    font-feature-settings: "rlig" 1, "calt" 1;
   }
   
   /* Custom scrollbar */

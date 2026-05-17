@@ -208,17 +208,37 @@ function FeatureSparkline({
   );
 }
 
+/**
+ * Re-mapping component to manage local visibility state.
+ * The original visibleFeatures prop is overridden by buttons.
+ */
 function UnifiedForecastChart({
   featureKeys,
   preds,
   timestamps,
-  visibleFeatures,
+  visibleFeatures: _, // Ignored in favor of local state
 }: {
   featureKeys: string[];
   preds: ForecastPrediction[];
   timestamps: string[];
   visibleFeatures: Record<string, boolean>;
 }) {
+  const [activeVisible, setActiveVisible] = useState<Record<string, boolean>>(
+    Object.fromEntries(featureKeys.map((k) => [k, true])),
+  );
+
+  const toggleFeature = (key: string) => {
+    setActiveVisible((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const showAll = () => {
+    setActiveVisible(Object.fromEntries(featureKeys.map((k) => [k, true])));
+  };
+
+  const hideAll = () => {
+    setActiveVisible(Object.fromEntries(featureKeys.map((k) => [k, false])));
+  };
+
   const chartWidth = Math.max(1200, preds.length * 60);
 
   const chartData = preds.map((item, index) => {
@@ -238,6 +258,47 @@ function UnifiedForecastChart({
 
   return (
     <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-white/5 pb-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {featureKeys.map((key, i) => {
+            const isVisible = activeVisible[key] !== false;
+            const color = palette[i % palette.length] ?? defaultColor;
+            return (
+              <button
+                key={key}
+                onClick={() => toggleFeature(key)}
+                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-all duration-200 ${
+                  isVisible
+                    ? "border-transparent bg-slate-100 text-slate-950 shadow-lg"
+                    : "border-white/10 bg-white/5 text-slate-400 opacity-60 hover:opacity-100"
+                }`}
+                style={isVisible ? { backgroundColor: color, color: "#fff" } : {}}
+              >
+                <div
+                  className={`h-2 w-2 rounded-full ${isVisible ? "bg-white" : ""}`}
+                  style={!isVisible ? { backgroundColor: color } : {}}
+                />
+                {formatFeatureLabel(key)}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={showAll}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-white/10"
+          >
+            Show All
+          </button>
+          <button
+            onClick={hideAll}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-white/10"
+          >
+            Hide All
+          </button>
+        </div>
+      </div>
+
       <div className="mb-2 flex items-center justify-between gap-3">
         <div>
           <h5 className="text-sm font-medium text-slate-100">Unified forecast overview</h5>
@@ -276,7 +337,7 @@ function UnifiedForecastChart({
               />
               <Tooltip content={<ForecastTooltip />} />
               {featureKeys.map((key, index) => {
-                const isVisible = visibleFeatures[key] !== false;
+                const isVisible = activeVisible[key] !== false;
 
                 return (
                   <Line
@@ -289,7 +350,7 @@ function UnifiedForecastChart({
                     fillOpacity={isVisible ? 1 : 0}
                     opacity={isVisible ? 1 : 0}
                     style={{
-                      transition: "opacity 420ms ease, stroke-opacity 420ms ease, fill-opacity 420ms ease",
+                      transition: "opacity 350ms ease, stroke-opacity 350ms ease",
                       pointerEvents: isVisible ? "auto" : "none",
                     }}
                     dot={(dotProps: ForecastDotProps) => {
@@ -297,18 +358,43 @@ function UnifiedForecastChart({
                         return false;
                       }
 
-                      return <circle cx={dotProps.cx} cy={dotProps.cy} r={5} fill="#ef4444" stroke="#fff" strokeWidth={2} />;
+                      return (
+                        <circle
+                          key={`anomaly-${key}-${dotProps.cx}`}
+                          cx={dotProps.cx}
+                          cy={dotProps.cy}
+                          r={5}
+                          fill="#ef4444"
+                          stroke="#fff"
+                          strokeWidth={2}
+                        />
+                      );
                     }}
-                    activeDot={{ r: 4 }}
-                    isAnimationActive
-                    animationDuration={1000}
-                    animationEasing="ease-out"
+                    activeDot={isVisible ? { r: 6 } : false}
                   />
                 );
               })}
             </LineChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      {/* Individual Feature Sparklines */}
+      <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {featureKeys.map((key, index) => {
+          if (activeVisible[key] === false) return null;
+
+          const values = preds.map((p) => Number(p.features?.[key] ?? 0));
+          return (
+            <FeatureSparkline
+              key={key}
+              featureKey={key}
+              color={palette[index % palette.length] ?? defaultColor}
+              values={values}
+              timestamps={timestamps}
+            />
+          );
+        })}
       </div>
     </div>
   );
