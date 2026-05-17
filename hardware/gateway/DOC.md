@@ -42,7 +42,15 @@ If you need to accept raw LoRa payloads without signatures (for example during d
 Example client payload (JSON sent over LoRa):
 
 ```json
-{ "id": "sensor-01", "metric": "turb_raw", "value": 1234, "seq": 42, "hops": 0, "ts": 1650000000, "sig": "<base64-signature>" }
+{
+  "id": "sensor-01",
+  "metric": "turb_raw",
+  "value": 1234,
+  "seq": 42,
+  "hops": 0,
+  "ts": 1650000000,
+  "sig": "<base64-signature>"
+}
 ```
 
 Provisioning: generate an Ed25519 keypair per device, store the private key securely on the device (or in a secure element), and add the device's public key (base64) to `hardware/gateway/keys/pubkeys.json` prior to deployment.
