@@ -1,35 +1,35 @@
 export const colors = {
-  // Primary - Ocean Theme
+  // Primary - Neon Night Theme
   ocean: {
-    deep: "#0A1929",
-    primary: "#00BCD4",
-    light: "#4DD0E1",
-    pale: "#B2EBF2",
+    deep: "#050912",
+    primary: "#22d3ee",
+    light: "#00ffa8",
+    pale: "#7dd3fc",
   },
 
   // Surfaces
   surface: {
-    dark: "#132F4C",
-    medium: "#1E4976",
-    light: "#1A3A5C",
+    dark: "#0b1622",
+    medium: "#102538",
+    light: "#17324b",
   },
 
   // Status Colors
   status: {
-    safe: "#4CAF50",
-    warning: "#FFC107",
-    critical: "#F44336",
-    info: "#2196F3",
+    safe: "#00ffa8",
+    warning: "#b6ff4d",
+    critical: "#ff4d6d",
+    info: "#38bdf8",
   },
 
   // Text
   text: {
     primary: "#FFFFFF",
-    secondary: "#94A3B8",
-    muted: "#64748B",
+    secondary: "#9fb3c8",
+    muted: "#6b85a3",
   },
 
   // Borders
-  border: "#334155",
-  borderLight: "#475569",
+  border: "#1f3346",
+  borderLight: "#2f4a63",
 } as const;
