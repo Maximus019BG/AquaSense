@@ -390,6 +390,7 @@ struct SensorSnapshot
     int tempRaw;
     bool hasTempC;
     int32_t tempCx10;
+    float tempC;
 };
 
 bool appendJson(char *buf, size_t bufsize, int &offset, const char *fmt, ...)
@@ -429,6 +430,9 @@ bool buildSnapshotJson(const SensorSnapshot &snapshot, char *buf, size_t bufsize
         return false;
 
     if (snapshot.hasTempC && !appendJson(buf, bufsize, offset, ",\"temp_c_x10\":%ld", (long)snapshot.tempCx10))
+        return false;
+
+    if (snapshot.hasTempC && !appendJson(buf, bufsize, offset, ",\"temperature\":%.1f", (double)snapshot.tempC))
         return false;
 
     if (snapshot.hasLux && !appendJson(buf, bufsize, offset, ",\"lux\":%ld", (long)snapshot.lux))
@@ -566,6 +570,7 @@ void setup()
     bh1750Ready = false;
 #endif
 
+    pinMode(TEMP_SENSOR_PIN, INPUT_PULLUP);
     oneWireTherm.begin();
     uint8_t count = oneWireTherm.getDeviceCount();
     oneWireReady = (count > 0);
@@ -725,10 +730,9 @@ void loop()
     logInfo("SYS", "DIAGNOSTIC_BUILD: skipping ADXL345 and BH1750 sensor reads");
 #endif
 
-    // Try analog read (thermistor/LM35 style probe)
-    int analogRaw = analogRead(TEMP_SENSOR_PIN);
-    snapshot.tempRaw = analogRaw;
-    logInfo("TEMP", "analog pin %d raw=%d", TEMP_SENSOR_PIN, analogRaw);
+    // GPIO 4 is used as a digital OneWire bus for the temperature probe.
+    snapshot.tempRaw = -1;
+    logInfo("TEMP", "digital OneWire pin %d", TEMP_SENSOR_PIN);
 
     // Try OneWire (DS18B20 / waterproof probe)
     if (oneWireReady)
@@ -741,6 +745,7 @@ void loop()
             int32_t tempCx10 = (int32_t)lroundf(owTemp * 10.0f);
             snapshot.hasTempC = true;
             snapshot.tempCx10 = tempCx10;
+            snapshot.tempC = owTemp;
             logData("Temperature(1W)", tempCx10, "x10C");
         }
     }
