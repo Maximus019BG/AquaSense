@@ -3,7 +3,7 @@ import os
 import logging
 import glob
 from dotenv import load_dotenv
-from sensor_reader import LoraSensorReader, DummySensorReader
+from sensor_reader import LoraSensorReader, DummySensorReader, VtmisSensorReader, CombinedSensorReader
 from http_transmitter import HttpTransmitter
 from auth import verify_message, load_pubkeys
 import base64
@@ -42,6 +42,8 @@ def main():
     # If USE_DUMMY_DATA is set to "true", force dummy polling mode;
     # otherwise attempt to use the LoRa reader and fall back to dummy polling.
     USE_DUMMY_DATA = os.environ.get("USE_DUMMY_DATA", "false").lower() == "true"
+    USE_VTMIS = os.environ.get("USE_VTMIS", "false").lower() == "true"
+    VTMIS_STATION = os.environ.get("VTMIS_STATION", "23")
     INTERVAL_SECONDS = int(os.environ.get("INTERVAL_SECONDS", "1"))
     DEVICE_KEY = os.environ.get("DEVICE_KEY", "default-device-key")
     # If true, accept LoRa messages without Ed25519 signatures (raw LoRa)
@@ -55,12 +57,34 @@ def main():
 
     transmitter = HttpTransmitter(SERVER_URL)
 
-    # Initialize appropriate reader. Prefer LoRa if available unless overridden.
+    # Initialize reader(s). Support combining VTMIS + Dummy if both enabled
+    readers_to_combine = []
+    mode = "lora"  # default
+    
+    if USE_VTMIS:
+        logger.info(f"Initializing VTMIS Sensor Reader (station {VTMIS_STATION})...")
+        readers_to_combine.append(VtmisSensorReader(station_id=VTMIS_STATION))
+        mode = "combined" if USE_DUMMY_DATA else "vtmis"
+    
     if USE_DUMMY_DATA:
-        logger.info("Initializing with Dummy Sensor Reader (polling mode)...")
-        reader = DummySensorReader()
-        mode = "dummy"
+        logger.info("Initializing Dummy Sensor Reader...")
+        readers_to_combine.append(DummySensorReader())
+        mode = "combined" if USE_VTMIS else "dummy"
+    
+    # If multiple readers were requested, keep them as a list so we can
+    # poll and transmit each reader's data separately (avoids mixing VTMIS
+    # and local/dummy payloads in a single request which can cause server
+    # errors). If a single reader is present, keep the legacy `reader` API.
+    multiple_readers = False
+    if readers_to_combine:
+        if len(readers_to_combine) > 1:
+            logger.info(f"Will poll and transmit {len(readers_to_combine)} sensor readers separately")
+            multiple_readers = True
+            reader = None
+        else:
+            reader = readers_to_combine[0]
     else:
+        # Fall back to LoRa
         user_set_port = "LORA_PORT" in os.environ
         selected_port = LORA_PORT
 
@@ -100,14 +124,43 @@ def main():
         last_seen = {}
         recent_messages = []
 
-        if mode == "dummy":
-            # Polling mode for dummy data with a fixed interval
+        if mode in ["dummy", "vtmis", "combined"]:
+            # Polling mode for dummy data, VTMIS, and combined sources with a fixed interval
             while True:
-                data = reader.read_data()
-                if data:
-                    data["device_key"] = DEVICE_KEY
-                    transmitter.transmit(data)
-                time.sleep(INTERVAL_SECONDS)
+                if multiple_readers:
+                    # Poll each configured reader and send its own HTTP request.
+                    for r in readers_to_combine:
+                        try:
+                            data = r.read_data()
+                        except Exception as e:
+                            logger.warning(f"Error reading from {r.__class__.__name__}: {e}")
+                            data = None
+
+                        if not data:
+                            continue
+
+                        # Annotate source to help server-side routing/processing
+                        src = getattr(r, "__class__", type(r)).__name__.lower()
+                        if "vtmis" in src:
+                            data["source"] = "vtmis"
+                        elif "dummy" in src:
+                            data["source"] = "dummy"
+                        else:
+                            data["source"] = "sensor"
+
+                        data["device_key"] = DEVICE_KEY
+                        transmitter.transmit(data)
+
+                    time.sleep(INTERVAL_SECONDS)
+                    continue
+
+                # Single reader path (legacy behavior)
+                while True:
+                    data = reader.read_data()
+                    if data:
+                        data["device_key"] = DEVICE_KEY
+                        transmitter.transmit(data)
+                    time.sleep(INTERVAL_SECONDS)
         else:
             # For real LoRa hardware, block and transmit immediately when a message arrives
             while True:
