@@ -10,6 +10,8 @@ The codebase is designed with abstraction, making it modular and easy to adapt f
 
 - **`sensor_reader.py`**: Defines abstract classes for reading data. It currently implements:
   - `LoraSensorReader`: Reads telemetry from a serial LoRa module and returns parsed payloads as they arrive.
+  - `DummySensorReader`: Generates realistic dummy water quality data for testing and development.
+  - `VtmisSensorReader`: Fetches atmospheric data from the VTMIS (Bulgarian meteorological service) Highcharts graphs and maps it to water quality readings.
 - **`http_transmitter.py`**: Handles transmitting the serialized JSON data robustly to a configured HTTP server.
 - **`main.py`**: The entrypoint that brings things together, handling environment-based configuration and the main transmission loop. When LoRa hardware is used, incoming messages are forwarded immediately upon reception; when running without LoRa the gateway can operate in a polling mode using `INTERVAL_SECONDS`.
 - **`main.py`**: The entrypoint that brings things together, handling environment-based configuration and the main transmission loop. When LoRa hardware is available, incoming messages are forwarded immediately upon reception. The gateway extracts a `device_id` from incoming LoRa payloads and includes it in the HTTP request as `buoy_id`.
@@ -26,7 +28,10 @@ The codebase is designed with abstraction, making it modular and easy to adapt f
 
 - `SERVER_URL`: The destination for your HTTP POST requests. (Default: `http://localhost:3000/api/readings`)
 - `LORA_PORT`: The serial port your LoRa module is attached to. (Default: `/dev/ttyUSB0`)
-- `INTERVAL_SECONDS`: Delay between transmissions when running in polling mode.
+- `USE_DUMMY_DATA`: When set to `true`, use the DummySensorReader for testing without LoRa hardware. (Default: `false`)
+- `USE_VTMIS`: When set to `true`, fetch data from VTMIS Highcharts graphs instead of LoRa. (Default: `false`)
+- `VTMIS_STATION`: The VTMIS station ID to fetch data from. (Default: `23` for Burgas, Bulgaria)
+- `INTERVAL_SECONDS`: Delay between transmissions when running in polling mode (Dummy or VTMIS). (Default: `1`)
 - `DEVICE_KEY`: Optional device identifier to include with each payload (Default: `default-device-key`).
 - `HOPS_WINDOW_SECONDS`: Time window (seconds) to consider duplicate hops for the same `buoy_id` (Default: `2.0`).
 - `ALLOW_RAW_LORA`: When set to `true`, the gateway will accept LoRa payloads without Ed25519 signatures. Use only for testing or in trusted networks. (Default: `false`)
@@ -54,6 +59,25 @@ Example client payload (JSON sent over LoRa):
 ```
 
 Provisioning: generate an Ed25519 keypair per device, store the private key securely on the device (or in a secure element), and add the device's public key (base64) to `hardware/gateway/keys/pubkeys.json` prior to deployment.
+
+### VTMIS Data Source
+
+The gateway can fetch atmospheric and oceanographic data from the VTMIS (Bulgarian National Institute of Meteorology and Hydrology) Highcharts graphs at `https://www.vtmis.bg/graph/nimh_with_direction.php`.
+
+**Data Mapping**: VTMIS atmospheric sensors are mapped to water quality readings as follows:
+- **Air Temperature** (°C) → `temperature`
+- **Air Pressure** (mbar, ~1000–1025 range) → `ph` (scaled linearly to pH 6.5–7.5 range)
+- **Visibility** (meters, higher = better visibility) → `turbidity` (inverse mapping: 10,000m → 0 turbidity, 0m → 100 turbidity)
+- **Wind Speed** (m/s) → `light_intensity` (scaled 0–10 by dividing by 2)
+- **Dissolved Oxygen** and **Water Level** are set to default values (8.0 and 0.0 respectively)
+
+**Combined Mode**: You can enable both `USE_VTMIS=true` and `USE_DUMMY_DATA=true` simultaneously. When both are enabled, the `CombinedSensorReader` merges data from both sources, with VTMIS data taking precedence. This allows you to get real environmental data from VTMIS plus simulated gyro/accelerometer data from the dummy sensor.
+
+**Usage Examples**:
+- VTMIS only: `USE_VTMIS=true` and `USE_DUMMY_DATA=false`
+- Dummy only: `USE_VTMIS=false` and `USE_DUMMY_DATA=true`
+- Combined (VTMIS + Dummy): `USE_VTMIS=true` and `USE_DUMMY_DATA=true`
+- LoRa only: `USE_VTMIS=false` and `USE_DUMMY_DATA=false`
 
 ### Running
 

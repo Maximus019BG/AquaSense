@@ -26,5 +26,13 @@ class HttpTransmitter(DataTransmitter):
             print(f"Data transmitted successfully to {self.server_url}")
             return True
         except requests.exceptions.RequestException as e:
-            print(f"Failed to transmit data: {e}")
+            # If the response object is attached to the exception, try to show body
+            try:
+                resp = getattr(e, 'response', None)
+                if resp is not None:
+                    print(f"Failed to transmit data: {e} - status={resp.status_code} body={resp.text}")
+                else:
+                    print(f"Failed to transmit data: {e}")
+            except Exception:
+                print(f"Failed to transmit data: {e}")
             return False
