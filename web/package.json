@@ -9,13 +9,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "dev": "next dev --turbo",
+    "dev": "next dev --turbo -H 0.0.0.0",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "format:write": "prettier --write \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
-    "preview": "next build && next start",
-    "start": "next start",
+    "preview": "next build && next start -H 0.0.0.0",
+    "start": "next start -H 0.0.0.0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

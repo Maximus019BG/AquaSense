@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { verifyAccessToken } from "~/lib/auth";
 
 const publicPathPrefixes = ["/_next", "/api/auth", "/api/data", "/api/water-data", "/api/readings", "/public"];

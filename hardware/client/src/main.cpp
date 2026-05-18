@@ -388,6 +388,7 @@ void setup()
     phSensor.begin();
 #endif
 
+#ifndef DIAGNOSTIC_BUILD
     // Try confirmed ADXL345 wiring first, then light fallbacks.
     const uint8_t pinPairs[][2] = {
         {5, 18},
@@ -437,6 +438,10 @@ void setup()
 
     bh1750Ready = initBh1750();
     logMessage(bh1750Ready ? "INFO" : "WARN", "BH1750", bh1750Ready ? "ready" : "initialization failed");
+#else
+    logWarn("SYS", "DIAGNOSTIC_BUILD enabled: skipping ADXL345 and BH1750 probes");
+    bh1750Ready = false;
+#endif
 
     oneWireTherm.begin();
     uint8_t count = oneWireTherm.getDeviceCount();
@@ -545,6 +550,7 @@ void loop()
     logAndSend("pH raw", "ph_raw", phVal, "raw");
 #endif
 
+#ifndef DIAGNOSTIC_BUILD
     if (adxlReady)
     {
         int16_t ax = 0;
@@ -577,6 +583,9 @@ void loop()
             logWarn("BH1750", "read failed");
         }
     }
+#else
+    logInfo("SYS", "DIAGNOSTIC_BUILD: skipping ADXL345 and BH1750 sensor reads");
+#endif
 
     // Try analog read (thermistor/LM35 style probe)
     int analogRaw = analogRead(TEMP_SENSOR_PIN);

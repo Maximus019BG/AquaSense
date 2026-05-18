@@ -29,6 +29,7 @@ The codebase is designed with abstraction, making it modular and easy to adapt f
 - `INTERVAL_SECONDS`: Delay between transmissions when running in polling mode.
 - `DEVICE_KEY`: Optional device identifier to include with each payload (Default: `default-device-key`).
 - `HOPS_WINDOW_SECONDS`: Time window (seconds) to consider duplicate hops for the same `buoy_id` (Default: `2.0`).
+- `ALLOW_RAW_LORA`: When set to `true`, the gateway will accept LoRa payloads without Ed25519 signatures. Use only for testing or in trusted networks. (Default: `false`)
 
 ### Authentication (Ed25519)
 
@@ -36,10 +37,20 @@ The codebase is designed with abstraction, making it modular and easy to adapt f
 - The gateway looks up the client's public key by `id` (device id) in `keys/pubkeys.json`. Populate that file with a mapping of `device_id` -> base64(Ed25519 public key).
 - Unsigned or invalidly-signed messages are rejected by the gateway.
 
+If you need to accept raw LoRa payloads without signatures (for example during development or on a trusted local network), you can set the `ALLOW_RAW_LORA` environment variable to `true`. This disables signature enforcement and may expose you to spoofed messages, so only enable it when appropriate.
+
 Example client payload (JSON sent over LoRa):
 
 ```json
-{ "id": "sensor-01", "metric": "turb_raw", "value": 1234, "seq": 42, "hops": 0, "ts": 1650000000, "sig": "<base64-signature>" }
+{
+  "id": "sensor-01",
+  "metric": "turb_raw",
+  "value": 1234,
+  "seq": 42,
+  "hops": 0,
+  "ts": 1650000000,
+  "sig": "<base64-signature>"
+}
 ```
 
 Provisioning: generate an Ed25519 keypair per device, store the private key securely on the device (or in a secure element), and add the device's public key (base64) to `hardware/gateway/keys/pubkeys.json` prior to deployment.
