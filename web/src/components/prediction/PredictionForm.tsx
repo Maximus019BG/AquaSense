@@ -4,45 +4,34 @@ import React, { useId, useState } from "react";
 import { ForecastResults } from "./ForecastResults";
 
 export default function PredictionForm() {
-  const forecastPeriodId = useId();
+  const forecastAmountId = useId();
+  const forecastUnitId = useId();
   const forecastHelpId = useId();
   const forecastStatusId = useId();
 
-  const [forecastPeriod, setForecastPeriod] = useState<string>("2d");
+  const [forecastAmount, setForecastAmount] = useState<string>("2");
+  const [forecastUnit, setForecastUnit] = useState<"d" | "m" | "y">("d");
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState<string | null>(null);
   const [forecastResults, setForecastResults] = useState<any | null>(null);
 
-  function parseForecastPeriod(value: string) {
-    const match = /^(\d+)([hdwmy])$/.exec(value.trim().toLowerCase());
-    if (!match) return null;
+  function parseForecastPeriod(amountValue: string, unitValue: "d" | "m" | "y") {
+    const amount = Number(amountValue.trim());
 
-    const amount = Number(match[1]);
-    const unit = match[2];
-    const unitToDays: Record<string, number> = {
-      h: 1 / 24,
-      d: 1,
-      w: 7,
-      m: 30,
-      y: 365,
-    };
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
 
-    const totalDays = amount * unitToDays[unit];
-    return { amount, unit, totalDays };
+    const totalDays = amount * (unitValue === "d" ? 1 : unitValue === "m" ? 30 : 365);
+    return { amount, unit: unitValue, totalDays, period: `${amount}${unitValue}` };
   }
 
   async function runForecast() {
     setForecastError(null);
 
-    const normalizedPeriod = forecastPeriod.trim().toLowerCase();
-    const parsed = parseForecastPeriod(normalizedPeriod);
+    const parsed = parseForecastPeriod(forecastAmount, forecastUnit);
     if (!parsed) {
-      setForecastError("Enter a valid horizon like 5d, 18w, 3m, or 2y.");
-      return;
-    }
-
-    if (parsed.totalDays > 365) {
-      setForecastError("Maximum forecast horizon is 1 year.");
+      setForecastError("Enter a valid positive number for the forecast horizon.");
       return;
     }
 
@@ -51,7 +40,7 @@ export default function PredictionForm() {
       const resp = await fetch("/api/forecast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ period: normalizedPeriod }),
+        body: JSON.stringify({ period: parsed.period }),
       });
       if (!resp.ok) {
         const data = await resp.json();
@@ -71,59 +60,90 @@ export default function PredictionForm() {
     setForecastError(null);
   }
 
+  const selectedHorizon = (() => {
+    const parsed = parseForecastPeriod(forecastAmount, forecastUnit);
+    if (!parsed) {
+      return "n/a";
+    }
+
+    const unitLabel = forecastUnit === "d" ? "days" : forecastUnit === "m" ? "months" : "years";
+    return `${parsed.amount} ${unitLabel}`;
+  })();
+
   return (
-    <div className="p-6 bg-[#0F2636] border border-[#223645] rounded-xl">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Forecast by time period</h3>
-        <div className="text-sm text-gray-400">Type any horizon and request predictions for all features from the LSTM endpoint</div>
+    <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-6 shadow-[0_0_0_1px_rgba(0,255,168,0.08),0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-white">Forecast by time period</h3>
+          <p className="mt-1 text-sm text-slate-400">Pick a number and unit, then preview the curve with a cleaner timeline.</p>
+        </div>
+        <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200">
+          {selectedHorizon}
+        </div>
       </div>
 
-      <div className="mt-6 pt-6 border-t border-[#233741]">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h4 className="text-base font-semibold text-white">Forecast horizon</h4>
-            <p className="text-sm text-gray-400">Type any horizon you want, then request predictions for all features from the LSTM endpoint. Short horizons show hourly detail, month-scale horizons show weekly detail, and year-scale horizons show monthly detail.</p>
-          </div>
-        </div>
-
+      <div className="mt-6 border-t border-white/10 pt-6">
         <fieldset className="mb-4" aria-describedby={forecastHelpId}>
           <legend className="sr-only">Forecast horizon picker</legend>
-          <label htmlFor={forecastPeriodId} className="block text-sm text-gray-300 mb-2">
-              Forecast horizon
-          </label>
-          <input
-            id={forecastPeriodId}
-              type="text"
-              inputMode="text"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="e.g. 5d, 18w, 3m, 2y"
-            aria-describedby={`${forecastHelpId} ${forecastStatusId}`}
-              className="w-full p-2 bg-[#132F4C] rounded border border-[#334155] text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#6EE7B7]/70 focus:border-[#6EE7B7]"
-              value={forecastPeriod}
-              onChange={(e) => setForecastPeriod(e.target.value)}
-          />
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label htmlFor={forecastAmountId} className="mb-2 block text-sm text-slate-300">
+                Forecast amount
+              </label>
+              <input
+                id={forecastAmountId}
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="e.g. 18"
+                aria-describedby={`${forecastHelpId} ${forecastStatusId}`}
+                className="w-28 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/30"
+                value={forecastAmount}
+                onChange={(e) => setForecastAmount(e.target.value)}
+              />
+            </div>
 
-          <div className="mt-3 flex items-center justify-between gap-4">
-            <p id={forecastHelpId} className="text-xs text-gray-400">
-                Enter a horizon with a number and a unit, for example 5d, 18w, 3m, or 1y. Maximum horizon is 1 year.
-            </p>
-            <div id={forecastStatusId} className="text-xs text-gray-400 min-w-fit" aria-live="polite">
-                {`Selected horizon: ${forecastPeriod || "n/a"}`}
+            <div>
+              <label htmlFor={forecastUnitId} className="mb-2 block text-sm text-slate-300">
+                Unit
+              </label>
+              <select
+                id={forecastUnitId}
+                aria-describedby={`${forecastHelpId} ${forecastStatusId}`}
+                className="w-36 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-400/30"
+                value={forecastUnit}
+                onChange={(e) => setForecastUnit(e.target.value as "d" | "m" | "y")}
+              >
+                <option value="d">Days</option>
+                <option value="m">Months</option>
+                <option value="y">Years</option>
+              </select>
             </div>
           </div>
 
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex items-center justify-between gap-4">
+            <p id={forecastHelpId} className="text-xs text-slate-400">
+              Pick a numeric horizon and a unit. The request will be sent as a compact period string.
+            </p>
+            <div id={forecastStatusId} className="min-w-fit text-xs text-slate-400" aria-live="polite">
+              {`Selected horizon: ${selectedHorizon}`}
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               onClick={runForecast}
               disabled={forecastLoading}
-              className="px-4 py-2 bg-[#6EE7B7] text-black rounded disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#6EE7B7]/70"
+              className="rounded-xl bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 px-4 py-2 font-medium text-slate-950 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
             >
               {forecastLoading ? "Forecasting..." : "Run Forecast"}
             </button>
             <button
               onClick={clearForecast}
-              className="px-3 py-2 bg-[#334155] text-white rounded focus:outline-none focus:ring-2 focus:ring-[#93C5FD]/70"
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
             >
               Clear Forecast
             </button>
@@ -132,7 +152,7 @@ export default function PredictionForm() {
 
           {forecastError && (
             <div 
-              className="mt-4 p-4 bg-red-900/20 border border-red-700 rounded-lg text-red-300 flex items-start gap-3" 
+              className="mt-4 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-950/25 p-4 text-red-300" 
               role="alert" 
               aria-live="assertive"
             >

@@ -29,23 +29,21 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "h-[calc(100vh-64px)] bg-[#0A1929] border-r border-[#334155] transition-all duration-300",
+        "h-[calc(100vh-4rem)] border-r border-white/10 bg-slate-950/90 backdrop-blur-xl transition-all duration-300",
         collapsed ? "w-20" : "w-64"
       )}
     >
-      {/* Collapse Toggle */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex justify-end p-2 hover:bg-white/5"
+        className="flex w-full justify-end p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
       >
         {collapsed ? (
-          <ChevronRight className="w-5 h-5 text-gray-400" />
+          <ChevronRight className="h-5 w-5" />
         ) : (
-          <ChevronLeft className="w-5 h-5 text-gray-400" />
+          <ChevronLeft className="h-5 w-5" />
         )}
       </button>
 
-      {/* Navigation */}
       <nav className="p-3 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -56,13 +54,13 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all",
+                "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200",
                 isActive
-                  ? "bg-[#00BCD4]/20 text-[#00BCD4]"
-                  : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                  ? "border border-emerald-400/25 bg-emerald-400/10 text-emerald-200 shadow-[0_0_24px_rgba(0,255,168,0.12)]"
+                  : "text-slate-400 hover:border hover:border-white/10 hover:bg-white/5 hover:text-slate-100"
               )}
             >
-              <Icon className="w-5 h-5 flex-shrink-0" />
+              <Icon className="h-5 w-5 flex-shrink-0" />
               {!collapsed && (
                 <span className="text-sm font-medium">{item.label}</span>
               )}

@@ -9,7 +9,7 @@ export const env = createEnv({
   server: {
     NODE_ENV: z.enum(["development", "test", "production"]),
     SUPABASE_SERVICE_KEY: z.string().optional(),
-    SENSOR_API_KEY: z.string().min(1),
+    SENSOR_API_KEY: z.string().optional(),
   },
 
   client: {

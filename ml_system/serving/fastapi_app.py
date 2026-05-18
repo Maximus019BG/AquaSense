@@ -128,10 +128,10 @@ def _get_forecast_assets():
         "sea_level_m",
         "temperature_C",
         "dissolved_o2",
-        "primary_production",
         "salinity_psu",
-        "nitrate",
-        "phosphate",
+        "current_speed_m_s",
+        "ph",
+        "turbidity_kd",
     ]
 
 

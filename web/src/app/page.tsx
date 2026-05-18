@@ -15,9 +15,11 @@ import {
   Ruler,
   Sun,
   Moon,
+  Activity,
+  Brain,
+  Waves,
 } from "lucide-react";
 import type { Alert } from "~/types";
-import PredictionForm from "~/components/prediction/PredictionForm";
 
 interface SensorValues {
   temperature: number;
@@ -223,6 +225,44 @@ export default function DashboardPage() {
     [sensors]
   );
 
+  const liveMetrics = useMemo(
+    () => [
+      {
+        label: "Temperature",
+        value: `${sensors.temperature.toFixed(1)}°C`,
+        color: "#FF6B6B",
+        detail: sensors.temperature > 27.5 ? "Heating up" : "Stable thermal band",
+      },
+      {
+        label: "pH",
+        value: sensors.ph.toFixed(2),
+        color: "#4ECDC4",
+        detail: sensors.ph < 6.5 || sensors.ph > 8.5 ? "Needs attention" : "Balanced chemistry",
+      },
+      {
+        label: "Turbidity",
+        value: `${sensors.turbidity.toFixed(1)} NTU`,
+        color: "#FFE66D",
+        detail: sensors.turbidity > 35 ? "Particles rising" : "Clear water column",
+      },
+      {
+        label: "Oxygen",
+        value: `${sensors.dissolvedOxygen.toFixed(1)} mg/L`,
+        color: "#95E1D3",
+        detail: sensors.dissolvedOxygen < 6 ? "Low oxygen margin" : "Healthy saturation",
+      },
+      {
+        label: "Water Level",
+        value: `${Math.round(sensors.waterLevel)} cm`,
+        color: "#6C5CE7",
+        detail: sensors.waterLevel < 210 || sensors.waterLevel > 290 ? "Outside guard band" : "Within expected range",
+      },
+    ],
+    [sensors]
+  );
+
+  const headerTone = liveMetrics[alertCount > 0 ? 0 : 3] ?? liveMetrics[0];
+
   const handleQualityChange = useCallback((q: "PERF" | "HIGH" | "ULTRA") => {
     setQuality(q);
   }, []);
@@ -232,103 +272,146 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="grid grid-cols-12 gap-6">
-      <div className="col-span-2">
-        <SensorStatus sensors={sensors} />
+    <div className="space-y-4">
+      <section className="rounded-[1.75rem] border border-white/10 bg-slate-950/85 px-4 py-3 shadow-[0_20px_70px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:px-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.28em] text-slate-400">
+            <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-cyan-200">Live 3D twin</span>
+            <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-emerald-200">Dynamic sensors</span>
+            <span className="rounded-full border border-violet-400/20 bg-violet-400/10 px-3 py-1 text-violet-200">Analytics palette</span>
+          </div>
 
-        <div className="mt-6">
-          <AlertTimeline alerts={mockAlerts} />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[520px]">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+              <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                <Activity className="h-3.5 w-3.5" style={{ color: headerTone.color }} />
+                Sync
+              </div>
+              <p className="mt-1 text-sm font-semibold text-white">{syncAgo}s</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+              <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                <Brain className="h-3.5 w-3.5" style={{ color: "#4ECDC4" }} />
+                Alerts
+              </div>
+              <p className="mt-1 text-sm font-semibold text-white">{alertCount}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+              <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                <Waves className="h-3.5 w-3.5" style={{ color: "#95E1D3" }} />
+                Scene
+              </div>
+              <p className="mt-1 text-sm font-semibold text-white">{quality}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+              <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                <Sun className="h-3.5 w-3.5 text-amber-300" />
+                Time
+              </div>
+              <p className="mt-1 text-sm font-semibold text-white">{formatTime(timeOfDay)}</p>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div className="col-span-7">
-        <div
-          className="bg-[#132F4C] rounded-xl border border-[#334155] overflow-hidden relative"
-          style={{ height: "480px" }}
-        >
-          <WaterScene
-            turbidity={sensorData.turbidity}
-            ph={sensorData.ph}
-            dissolvedOxygen={sensorData.dissolvedOxygen}
-            temperature={sensorData.temperature}
-            waterLevel={sensorData.waterLevel}
-            alertLevel={sensorData.alertLevel}
-            quality={quality}
-            timeOfDay={timeOfDay}
-          />
+      <div className="grid grid-cols-12 gap-4 xl:gap-5">
+        <aside className="col-span-12 space-y-4 xl:col-span-3">
+          <SensorStatus sensors={sensors} />
+          <AlertTimeline alerts={mockAlerts} />
 
-          <div className="absolute bottom-3 right-3 z-30 flex gap-1">
-            {(["PERF", "HIGH", "ULTRA"] as const).map((q) => (
-              <button
-                key={q}
-                onClick={() => handleQualityChange(q)}
-                className={`px-2 py-1 text-[9px] font-bold tracking-wider rounded border transition-all ${
-                  quality === q
-                    ? "bg-[rgba(0,188,212,0.18)] border-[rgba(0,188,212,0.5)] text-[#00BCD4]"
-                    : "bg-[rgba(10,25,41,0.85)] border-[rgba(0,188,212,0.2)] text-[#475569]"
-                }`}
-              >
-                {q}
-              </button>
+          <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/80 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.3)] backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500">Live metrics</p>
+              <span className="text-[9px] font-mono text-slate-600">Dynamic</span>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {liveMetrics.map((metric) => (
+                <div key={metric.label} className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/5 px-3 py-2">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">{metric.label}</p>
+                    <p className="text-sm font-semibold text-white">{metric.value}</p>
+                  </div>
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: metric.color, boxShadow: `0 0 10px ${metric.color}` }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        <main className="col-span-12 space-y-4 xl:col-span-6">
+          <div className="relative aspect-[21/11] w-full overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/90 shadow-[0_30px_100px_rgba(0,0,0,0.45)] xl:aspect-[21/13]">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(0,188,212,0.14),_transparent_36%),radial-gradient(circle_at_80%_20%,_rgba(108,92,231,0.14),_transparent_28%),linear-gradient(180deg,_rgba(2,6,23,0.08)_0%,_rgba(2,6,23,0.34)_100%)]" />
+            <WaterScene
+              turbidity={sensorData.turbidity}
+              ph={sensorData.ph}
+              dissolvedOxygen={sensorData.dissolvedOxygen}
+              temperature={sensorData.temperature}
+              waterLevel={sensorData.waterLevel}
+              alertLevel={sensorData.alertLevel}
+              quality={quality}
+              timeOfDay={timeOfDay}
+            />
+
+            <div className="absolute left-4 top-4 z-30 flex items-center gap-2 rounded-full border border-cyan-400/15 bg-slate-950/80 px-3 py-2 backdrop-blur-xl">
+              {timeOfDay >= 6 && timeOfDay < 20 ? <Sun size={14} color="#FFD700" /> : <Moon size={14} color="#AADDFF" />}
+              <input
+                type="range"
+                min="0"
+                max="23.9"
+                step="0.1"
+                value={timeOfDay}
+                onChange={(e) => handleTimeChange(parseFloat(e.target.value))}
+                className="h-1 w-28 cursor-pointer accent-[#FFD700]"
+              />
+              <span className="min-w-[132px] text-[10px] font-mono text-[#94A3B8]">
+                {formatTime(timeOfDay)} · {getTimeDescription(timeOfDay)}
+              </span>
+            </div>
+
+            <div className="absolute right-4 top-4 z-30 flex items-center gap-1.5 rounded-full border border-emerald-400/15 bg-slate-950/80 px-3 py-1.5 backdrop-blur-xl">
+              <div className="h-1.5 w-1.5 rounded-full bg-[#4CAF50] animate-pulse" />
+              <span className="text-[10px] font-mono text-[#94A3B8]">LIVE · sync {syncAgo}s ago</span>
+            </div>
+
+            <div className="absolute left-4 bottom-4 z-30 rounded-full border border-white/10 bg-slate-950/80 px-3 py-1.5 backdrop-blur-xl">
+              <div className="flex flex-wrap items-center gap-2 text-[9px] text-slate-500">
+                <span>BLACK SEA DIGITAL TWIN</span>
+                <span className="text-slate-700">|</span>
+                <span>Depth: ~2215m max</span>
+                <span className="text-slate-700">|</span>
+                <span>Surface Area: ~436,400 km²</span>
+              </div>
+            </div>
+
+            <div className="absolute right-4 bottom-4 z-30 flex gap-1.5 rounded-full border border-white/10 bg-slate-950/80 p-1.5 backdrop-blur-xl">
+              {(["PERF", "HIGH", "ULTRA"] as const).map((q) => (
+                <button
+                  key={q}
+                  onClick={() => handleQualityChange(q)}
+                  className={`rounded-full px-3 py-1 text-[9px] font-bold tracking-[0.18em] transition-all ${
+                    quality === q
+                      ? "border border-cyan-400/50 bg-cyan-400/15 text-cyan-200 shadow-[0_0_18px_rgba(0,188,212,0.18)]"
+                      : "border border-white/10 bg-white/5 text-slate-500 hover:border-cyan-400/30 hover:text-cyan-200"
+                  }`}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <ChartSection />
+        </main>
+
+        <aside className="col-span-12 space-y-4 xl:col-span-3">
+          <ForecastPanel />
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+            {parameters.map((param) => (
+              <ParameterCard key={param.id} {...param} />
             ))}
           </div>
-
-          <div className="absolute top-2.5 right-3 z-20 flex items-center gap-1.5 bg-[rgba(10,25,41,0.8)] border border-[rgba(0,188,212,0.15)] rounded-full px-3 py-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#4CAF50] animate-pulse" />
-            <span className="text-[10px] text-[#94A3B8] font-mono">
-              LIVE · sync {syncAgo}s ago
-            </span>
-          </div>
-
-          <div className="absolute top-2.5 left-3 z-20 flex items-center gap-2 bg-[rgba(10,25,41,0.8)] border border-[rgba(255,193,7,0.15)] rounded-full px-3 py-1.5">
-            {timeOfDay >= 6 && timeOfDay < 20 ? (
-              <Sun size={14} color="#FFD700" />
-            ) : (
-              <Moon size={14} color="#AADDFF" />
-            )}
-            <input
-              type="range"
-              min="0"
-              max="23.9"
-              step="0.1"
-              value={timeOfDay}
-              onChange={(e) => handleTimeChange(parseFloat(e.target.value))}
-              className="w-16 h-1 accent-[#FFD700] cursor-pointer"
-            />
-            <span className="text-[10px] text-[#94A3B8] font-mono min-w-[40px]">
-              {formatTime(timeOfDay)} · {getTimeDescription(timeOfDay)}
-            </span>
-          </div>
-
-          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 text-[9px] text-[#475569]">
-            <span> BLACK SEA DIGITAL TWIN</span>
-            <span className="mx-1">|</span>
-            <span>Depth: ~2215m max</span>
-            <span className="mx-1">|</span>
-            <span>Surface Area: ~436,400 km²</span>
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <ChartSection />
-        </div>
-      </div>
-
-      <div className="col-span-3 space-y-4">
-        {parameters.map((param) => (
-          <ParameterCard key={param.id} {...param} />
-        ))}
-
-        <ForecastPanel />
-      </div>
-
-      <div className="col-span-12 mt-8">
-        <div className="bg-[#1E293B] rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Prediction Form
-          </h2>
-          <PredictionForm />
-        </div>
+        </aside>
       </div>
     </div>
   );
