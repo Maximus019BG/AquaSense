@@ -209,35 +209,19 @@ function FeatureSparkline({
 }
 
 /**
- * Re-mapping component to manage local visibility state.
- * The original visibleFeatures prop is overridden by buttons.
+ * Unified forecast chart - displays all selected features on a normalized scale.
  */
 function UnifiedForecastChart({
   featureKeys,
   preds,
   timestamps,
-  visibleFeatures: _, // Ignored in favor of local state
+  visibleFeatures,
 }: {
   featureKeys: string[];
   preds: ForecastPrediction[];
   timestamps: string[];
   visibleFeatures: Record<string, boolean>;
 }) {
-  const [activeVisible, setActiveVisible] = useState<Record<string, boolean>>(
-    Object.fromEntries(featureKeys.map((k) => [k, true])),
-  );
-
-  const toggleFeature = (key: string) => {
-    setActiveVisible((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const showAll = () => {
-    setActiveVisible(Object.fromEntries(featureKeys.map((k) => [k, true])));
-  };
-
-  const hideAll = () => {
-    setActiveVisible(Object.fromEntries(featureKeys.map((k) => [k, false])));
-  };
 
   const chartWidth = Math.max(1200, preds.length * 60);
 
@@ -258,46 +242,6 @@ function UnifiedForecastChart({
 
   return (
     <div className="mb-6">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-white/5 pb-4">
-        <div className="flex flex-wrap items-center gap-2">
-          {featureKeys.map((key, i) => {
-            const isVisible = activeVisible[key] !== false;
-            const color = palette[i % palette.length] ?? defaultColor;
-            return (
-              <button
-                key={key}
-                onClick={() => toggleFeature(key)}
-                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-all duration-200 ${
-                  isVisible
-                    ? "border-transparent bg-slate-100 text-slate-950 shadow-lg"
-                    : "border-white/10 bg-white/5 text-slate-400 opacity-60 hover:opacity-100"
-                }`}
-                style={isVisible ? { backgroundColor: color, color: "#fff" } : {}}
-              >
-                <div
-                  className={`h-2 w-2 rounded-full ${isVisible ? "bg-white" : ""}`}
-                  style={!isVisible ? { backgroundColor: color } : {}}
-                />
-                {formatFeatureLabel(key)}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={showAll}
-            className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-white/10"
-          >
-            Show All
-          </button>
-          <button
-            onClick={hideAll}
-            className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-white/10"
-          >
-            Hide All
-          </button>
-        </div>
-      </div>
 
       <div className="mb-2 flex items-center justify-between gap-3">
         <div>
@@ -337,7 +281,7 @@ function UnifiedForecastChart({
               />
               <Tooltip content={<ForecastTooltip />} />
               {featureKeys.map((key, index) => {
-                const isVisible = activeVisible[key] !== false;
+                const isVisible = visibleFeatures[key] !== false;
 
                 return (
                   <Line
@@ -382,7 +326,7 @@ function UnifiedForecastChart({
       {/* Individual Feature Sparklines */}
       <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {featureKeys.map((key, index) => {
-          if (activeVisible[key] === false) return null;
+          if (visibleFeatures[key] === false) return null;
 
           const values = preds.map((p) => Number(p.features?.[key] ?? 0));
           return (
