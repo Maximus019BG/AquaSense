@@ -138,7 +138,12 @@ def main():
 
                         if not data:
                             continue
-
+                        # If this reader is a LoRa reader, make sure to log raw messages
+                        try:
+                            if r.__class__.__name__.lower().find("lora") != -1:
+                                logger.info("LoRa raw message from %s: %s", r.__class__.__name__, data)
+                        except Exception:
+                            pass
                         # Annotate source to help server-side routing/processing
                         src = getattr(r, "__class__", type(r)).__name__.lower()
                         if "vtmis" in src:
@@ -158,6 +163,13 @@ def main():
                 while True:
                     data = reader.read_data()
                     if data:
+                        # Log LoRa messages when using a LoRa reader (not dummy)
+                        try:
+                            if reader.__class__.__name__.lower().find("lora") != -1:
+                                logger.info("LoRa raw message: %s", data)
+                        except Exception:
+                            pass
+
                         data["device_key"] = DEVICE_KEY
                         transmitter.transmit(data)
                     time.sleep(INTERVAL_SECONDS)
