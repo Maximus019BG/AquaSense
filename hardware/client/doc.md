@@ -14,7 +14,7 @@
 
 - **Turbidity sensor**: `SENSOR_PIN` (analog input). See [platformio.ini](platformio.ini).
 - **pH sensor**: `PH_SENSOR_PIN` (analog input). Added default: `PH_SENSOR_PIN=19` in [platformio.ini](platformio.ini).
-- **Temperature probe / OneWire**: `TEMP_SENSOR_PIN` used for analog reads and OneWire. See [src/main.cpp](src/main.cpp).
+- **Temperature probe / OneWire**: `TEMP_SENSOR_PIN` is used as a digital OneWire bus. See [src/main.cpp](src/main.cpp).
 - **BH1750 light sensor (I2C)**: `BH1750_SDA_PIN`, `BH1750_SCL_PIN` (I2C pins). BH1750 is on I2C address 0x23. See [src/main.cpp](src/main.cpp).
 - **ADXL345 accelerometer**:
   - Primary: I2C on `ADXL345_SDA_PIN` / `ADXL345_SCL_PIN`.
@@ -25,9 +25,7 @@
 
 - **Turbidity**: read by `Sensor` class (`include/sensor.h`, `src/sensor.cpp`) via `analogRead(SENSOR_PIN)` and sent as metrics `turb_raw` and `turb_pct` in `loop()` ([src/main.cpp](src/main.cpp)).
 - **pH**: if `PH_SENSOR_PIN` defined, `Sensor phSensor(PH_SENSOR_PIN)` is created and raw value is sent as `ph_raw`. Currently raw ADC value is sent; optional calibration is not included yet. See `loop()` in [src/main.cpp](src/main.cpp).
-- **Temperature**: two approaches:
-  - Analog read on `TEMP_SENSOR_PIN` (thermistor or LM35 style).
-  - OneWire (DS18B20) on same `TEMP_SENSOR_PIN` using the `DallasTemperature` library; code checks devices and reads temperature. See [src/main.cpp](src/main.cpp).
+- **Temperature**: OneWire (DS18B20) on `TEMP_SENSOR_PIN` using the `DallasTemperature` library; code checks devices and reads temperature. GPIO 4 is treated as a digital bus, not an analog input. See [src/main.cpp](src/main.cpp).
 - **Light (BH1750)**: BH1750 I2C read with `readBh1750()` and sent as `lux` metric. See [src/main.cpp](src/main.cpp).
 - **Accelerometer (ADXL345)**: read axis values when detected; sends `accel_x`, `accel_y`, `accel_z` metrics. See detection and read in [src/main.cpp](src/main.cpp).
 
