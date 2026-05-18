@@ -2,6 +2,8 @@ import time
 import os
 import logging
 import glob
+import sys
+import select
 from dotenv import load_dotenv
 try:
     from .sensor_reader import LoraSensorReader, DummySensorReader, VtmisSensorReader, CombinedSensorReader
@@ -12,6 +14,56 @@ except ImportError:
     from http_transmitter import HttpTransmitter
     from auth import verify_message, load_pubkeys
 import base64
+
+
+def enable_hotkey_mode(logger: logging.Logger):
+    """Enable non-blocking single-char input when stdin is a TTY."""
+    if not sys.stdin.isatty():
+        return None
+
+    try:
+        import tty
+        import termios
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        tty.setcbreak(fd)
+
+        def restore() -> None:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+        logger.info("Hotkey mode enabled: press Ctrl+L to switch dummy turbidity mode")
+        return restore
+    except Exception as e:
+        logger.warning("Could not enable hotkey mode: %s", e)
+        return None
+
+
+def try_apply_hotkeys(logger: logging.Logger, readers_to_poll: list) -> None:
+    """Process non-blocking keyboard hotkeys for runtime overrides."""
+    if not sys.stdin.isatty():
+        return
+
+    try:
+        while True:
+            readable, _, _ = select.select([sys.stdin], [], [], 0)
+            if not readable:
+                break
+
+            ch = sys.stdin.read(1)
+            # Ctrl+L sends form feed (\x0c)
+            if ch == "\x0c":
+                for reader in readers_to_poll:
+                    if isinstance(reader, DummySensorReader):
+                        if reader.has_forced_turbidity():
+                            reader.clear_forced_turbidity()
+                            logger.info("Ctrl+L received: switched DummySensorReader turbidity mode to default (~94%%)")
+                        else:
+                            reader.set_forced_turbidity(63.0)
+                            logger.info("Ctrl+L received: switched DummySensorReader turbidity mode to forced 63%%")
+                        logger.info("----------")
+    except Exception as e:
+        logger.warning("Hotkey processing error: %s", e)
 
 
 def setup_logger(log_path: str) -> logging.Logger:
@@ -282,10 +334,12 @@ def main():
     try:
         last_seen = {}
         recent_messages = []
+        restore_hotkey_mode = enable_hotkey_mode(logger)
 
         if readers_to_poll:
             # Polling mode for VTMIS/Dummy and LoRa when present with a fixed interval.
             while True:
+                try_apply_hotkeys(logger, readers_to_poll)
                 for r in readers_to_poll:
                     try:
                         data = r.read_data()
@@ -326,6 +380,12 @@ def main():
         logger.info("Shutting down gateway...")
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+    finally:
+        try:
+            if 'restore_hotkey_mode' in locals() and restore_hotkey_mode:
+                restore_hotkey_mode()
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     main()

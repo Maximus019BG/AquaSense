@@ -46,10 +46,40 @@ class SensorDataReader:
 
 class DummySensorReader(SensorDataReader):
     """Generates dummy water sensor data if hardware is not available."""
+
+    def __init__(self):
+        self._forced_turbidity: Optional[float] = None
+
+    def set_forced_turbidity(self, value: Optional[float]) -> None:
+        self._forced_turbidity = value
+
+    def clear_forced_turbidity(self) -> None:
+        self._forced_turbidity = None
+
+    def has_forced_turbidity(self) -> bool:
+        return self._forced_turbidity is not None
     
     def read_data(self) -> Optional[Dict[str, Any]]:
         # Center temperature around 15.7°C with small Gaussian noise for realism
         temp = round(random.gauss(15.7, 0.5), 2)
+        # Keep dummy turbidity close to a highly turbid reading around 94%
+        turbidity = round(random.gauss(94.0, 1.2), 2)
+        if turbidity < 90.0:
+            turbidity = 90.0
+        if turbidity > 100.0:
+            turbidity = 100.0
+
+        # Optional keyboard-triggered override (Ctrl+M in main loop)
+        if self._forced_turbidity is not None:
+            turbidity = round(float(self._forced_turbidity), 2)
+
+        # Keep dummy water level around 2.0 meters
+        water_level = round(random.gauss(2.0, 0.12), 2)
+        if water_level < 1.6:
+            water_level = 1.6
+        if water_level > 2.4:
+            water_level = 2.4
+
         # Clamp to reasonable sensor bounds
         if temp < -10.0:
             temp = -10.0
@@ -59,7 +89,8 @@ class DummySensorReader(SensorDataReader):
             "temperature": temp,
             "ph": round(random.uniform(6.7, 7.8), 2),
             "light_intensity": round(random.uniform(0.0, 10.0), 2),
-            "turbidity": round(random.uniform(0.0, 89.0), 2),
+            "turbidity": turbidity,
+            "water_level": water_level,
             "gyro_level": {
                 "x": round(random.uniform(-90.0, 90.0), 2),
                 "y": round(random.uniform(-90.0, 90.0), 2),
