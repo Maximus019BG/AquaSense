@@ -3,6 +3,40 @@ import random
 import json
 from typing import Dict, Any, Optional
 
+
+def extract_first_json_object(buffer: str) -> tuple[Optional[Dict[str, Any]], str]:
+    """Extract the first JSON object from a mixed serial text buffer."""
+    decoder = json.JSONDecoder()
+
+    while buffer:
+        start = buffer.find("{")
+        if start == -1:
+            return None, ""
+
+        buffer = buffer[start:]
+        try:
+            payload, end = decoder.raw_decode(buffer)
+        except json.JSONDecodeError:
+            newline = buffer.find("\n")
+            if newline != -1:
+                candidate = buffer[:newline]
+                if "}" in candidate:
+                    buffer = buffer[newline + 1 :]
+                    continue
+
+            if len(buffer) > 4096:
+                return None, buffer[-4096:]
+            return None, buffer
+
+        remaining = buffer[end:].lstrip()
+        if isinstance(payload, dict):
+            return payload, remaining
+
+        buffer = remaining
+
+    return None, buffer
+
+
 class SensorDataReader:
     """Abstract base class for reading sensor data."""
     def read_data(self) -> Optional[Dict[str, Any]]:
@@ -60,11 +94,12 @@ class LoraSensorReader(SensorDataReader):
             self.serial = serial.Serial(self.port, self.baudrate, timeout=timeout)
         except Exception as e:
             raise RuntimeError(f"Failed to open serial port {self.port}: {e}") from e
+        self._text_buffer = ""
 
     def read_data(self) -> Optional[Dict[str, Any]]:
-        # Read whatever bytes are currently available and attempt to parse them as JSON.
+        # Read one serial chunk and extract JSON from mixed debug/log output.
         try:
-            raw = self.serial.read_all()
+            raw = self.serial.read_until(b"\n", size=512)
             if not raw:
                 return None
 
@@ -73,12 +108,10 @@ class LoraSensorReader(SensorDataReader):
             except Exception:
                 text = str(raw)
 
-            # Try to parse JSON first
-            try:
-                payload = json.loads(text)
-            except Exception:
-                # Return raw text under a key if JSON parsing fails
-                payload = {"raw": text, "raw_bytes": list(raw)}
+            self._text_buffer += text
+            payload, self._text_buffer = extract_first_json_object(self._text_buffer)
+            if payload is None:
+                return None
 
             payload.setdefault("timestamp", time.time())
             return payload

@@ -3,9 +3,14 @@ import os
 import logging
 import glob
 from dotenv import load_dotenv
-from sensor_reader import LoraSensorReader, DummySensorReader
-from http_transmitter import HttpTransmitter
-from auth import verify_message, load_pubkeys
+try:
+    from .sensor_reader import LoraSensorReader, DummySensorReader
+    from .http_transmitter import HttpTransmitter
+    from .auth import verify_message, load_pubkeys
+except ImportError:
+    from sensor_reader import LoraSensorReader, DummySensorReader
+    from http_transmitter import HttpTransmitter
+    from auth import verify_message, load_pubkeys
 import base64
 
 
@@ -24,12 +29,86 @@ def setup_logger(log_path: str) -> logging.Logger:
     return logger
 
 
+def serial_port_score(port) -> tuple[int, str]:
+    text = f"{port.description} {port.hwid}".lower()
+    score = 50
+    if any(token in text for token in ("usb", "ch340", "cp210", "silicon labs", "ftdi")):
+        score -= 40
+    if any(token in text for token in ("bluetooth", "bthenum")):
+        score += 40
+    return score, port.device
+
+
+def sort_serial_ports(ports) -> list[str]:
+    return [port.device for port in sorted(ports, key=serial_port_score)]
+
+
 def find_serial_ports() -> list[str]:
     try:
         import serial.tools.list_ports
-        return [port.device for port in serial.tools.list_ports.comports()]
+        ports = list(serial.tools.list_ports.comports())
+        return sort_serial_ports(ports)
     except Exception:
         return sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
+
+
+def first_present(data: dict, *keys: str):
+    for key in keys:
+        if key in data and data[key] is not None:
+            return data[key]
+    return None
+
+
+def normalize_lora_payload(data: dict) -> dict:
+    """Normalize compact LoRa payloads into the gateway/web reading shape."""
+    normalized = dict(data)
+    device_id = first_present(data, "id", "device_id", "deviceId", "device", "dev_id")
+    if device_id:
+        normalized["buoy_id"] = device_id
+        normalized.setdefault("device_id", device_id)
+
+    if "metric" in data and "value" in data:
+        metric = data.get("metric")
+        value = data.get("value")
+        if metric == "turb_pct":
+            normalized["turbidity"] = value
+        elif metric == "ph_raw":
+            normalized["ph_raw"] = value
+            normalized.setdefault("ph", value)
+        elif metric == "temp_c_x10":
+            normalized["temp_c_x10"] = value
+            normalized["temperature"] = float(value) / 10.0
+        elif metric == "lux":
+            normalized["lux"] = value
+            normalized["light_intensity"] = value
+        elif metric in ("accel_x", "accel_y", "accel_z"):
+            axis = metric.rsplit("_", 1)[1]
+            normalized.setdefault("gyro_accelerometer", {})[axis] = value
+        return normalized
+
+    if "turbidity" not in normalized and "turb_pct" in data:
+        normalized["turbidity"] = data["turb_pct"]
+
+    if "temperature" not in normalized and "temp_c_x10" in data:
+        normalized["temperature"] = float(data["temp_c_x10"]) / 10.0
+
+    if "ph" not in normalized and "ph_raw" in data:
+        normalized["ph"] = data["ph_raw"]
+
+    if "light_intensity" not in normalized and "lux" in data:
+        normalized["light_intensity"] = data["lux"]
+
+    accel_x = first_present(data, "accel_x")
+    accel_y = first_present(data, "accel_y")
+    accel_z = first_present(data, "accel_z")
+    if accel_x is not None or accel_y is not None or accel_z is not None:
+        normalized["gyro_accelerometer"] = {
+            "x": accel_x,
+            "y": accel_y,
+            "z": accel_z,
+        }
+
+    return normalized
 
 
 def main():
@@ -169,8 +248,10 @@ def main():
                     else:
                         logger.info("No signature present; ALLOW_RAW_LORA enabled — accepting raw LoRa message")
 
+                data = normalize_lora_payload(data)
+
                 # Extract buoy_id from expected device identifier fields in LoRa payload
-                buoy_id = data.get("device_id") or data.get("deviceId") or data.get("device") or data.get("dev_id")
+                buoy_id = data.get("buoy_id") or data.get("id") or data.get("device_id") or data.get("deviceId") or data.get("device") or data.get("dev_id")
                 if buoy_id:
                     data["buoy_id"] = buoy_id
 

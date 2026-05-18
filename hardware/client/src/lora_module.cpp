@@ -1,110 +1,239 @@
 #include "lora_module.h"
-#include <LoRa.h>
-#include <SPI.h>
+
+#ifdef LORA_USE_SERIAL2
+
+#ifndef LORA_SERIAL_RX_PIN
+#define LORA_SERIAL_RX_PIN 16
+#endif
+
+#ifndef LORA_SERIAL_TX_PIN
+#define LORA_SERIAL_TX_PIN 17
+#endif
+
+#ifndef LORA_SERIAL_BAUD
+#define LORA_SERIAL_BAUD 9600
+#endif
+
+#ifndef LORA_UART_RX_BUFFER_SIZE
+#define LORA_UART_RX_BUFFER_SIZE 256
+#endif
+
+static uint8_t uartRxBuffer[LORA_UART_RX_BUFFER_SIZE];
+static int uartRxLength = 0;
 
 LoRaModule::LoRaModule(long frequency) : _freq(frequency), _rxCb(nullptr) {}
 
 bool LoRaModule::begin()
 {
-    // SPI pins: SCK=23, MISO=35, MOSI=15
-    SPI.begin(23, 35, 15);
+    (void)_freq;
 
-    // Candidate control pins to try (CS). Reset and DIO0 fixed for now.
-    const int candidateCsPins[] = {22, 5, 15, 18, 21, 0, 2, 4};
-    const size_t csCount = sizeof(candidateCsPins) / sizeof(candidateCsPins[0]);
-    const int resetPin = 21;
-    const int dio0Pin = 32;
-    const uint8_t regVersion = 0x42;
+#ifdef LORA_M0_PIN
+    pinMode(LORA_M0_PIN, OUTPUT);
+    digitalWrite(LORA_M0_PIN, LOW);
+#endif
+#ifdef LORA_M1_PIN
+    pinMode(LORA_M1_PIN, OUTPUT);
+    digitalWrite(LORA_M1_PIN, LOW);
+#endif
+#ifdef LORA_AUX_PIN
+    pinMode(LORA_AUX_PIN, INPUT);
+#endif
 
-    Serial.printf("[LORA] init SPI SCK=%d MISO=%d MOSI=%d reset=%d dio0=%d\n", 23, 35, 15, resetPin, dio0Pin);
+    Serial2.begin(LORA_SERIAL_BAUD, SERIAL_8N1, LORA_SERIAL_RX_PIN, LORA_SERIAL_TX_PIN);
+    delay(100);
 
-    // Quick MISO pin health check
-    pinMode(35, INPUT_PULLUP);
-    int miso_state = digitalRead(35);
-    Serial.printf("[LORA] MISO pin %d digitalRead=%d\n", 35, miso_state);
+    Serial.printf("[LORA] init Serial2 UART RX=%d TX=%d baud=%ld\n",
+                  LORA_SERIAL_RX_PIN,
+                  LORA_SERIAL_TX_PIN,
+                  (long)LORA_SERIAL_BAUD);
+    Serial.println("[LORA] Serial2 transparent UART mode ready");
+    return true;
+}
 
-    pinMode(resetPin, OUTPUT);
-    digitalWrite(resetPin, HIGH);
+bool LoRaModule::send(const uint8_t *data, size_t len)
+{
+    size_t written = Serial2.write(data, len);
+    Serial2.write('\n');
+    Serial2.flush();
+    return written == len;
+}
 
-    for (size_t i = 0; i < csCount; ++i)
+void LoRaModule::onReceive(RxCallback cb)
+{
+    _rxCb = cb;
+}
+
+void LoRaModule::loop()
+{
+    while (Serial2.available())
     {
-        int cs = candidateCsPins[i];
-        pinMode(cs, OUTPUT);
-        digitalWrite(cs, HIGH); // deselect
+        int value = Serial2.read();
+        if (value < 0)
+            return;
 
-        // Manual reset pulse before probing
-        digitalWrite(resetPin, LOW);
-        delay(10);
-        digitalWrite(resetPin, HIGH);
-        delay(10);
+        uint8_t byteValue = (uint8_t)value;
+        if (byteValue == '\r')
+            continue;
 
-        Serial.printf("[LORA] probing CS=%d\n", cs);
-
-        uint8_t v_as_is = 0, v_mask7 = 0, v_or80 = 0;
-
-        SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
-        digitalWrite(cs, LOW);
-        SPI.transfer(regVersion);
-        v_as_is = SPI.transfer(0x00);
-        digitalWrite(cs, HIGH);
-        SPI.endTransaction();
-
-        delay(5);
-
-        SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
-        digitalWrite(cs, LOW);
-        SPI.transfer(regVersion & 0x7F);
-        v_mask7 = SPI.transfer(0x00);
-        digitalWrite(cs, HIGH);
-        SPI.endTransaction();
-
-        delay(5);
-
-        SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
-        digitalWrite(cs, LOW);
-        SPI.transfer(regVersion | 0x80);
-        v_or80 = SPI.transfer(0x00);
-        digitalWrite(cs, HIGH);
-        SPI.endTransaction();
-
-        Serial.printf("[LORA] probe CS=%d -> as-is=0x%02X mask7=0x%02X or80=0x%02X\n", cs, v_as_is, v_mask7, v_or80);
-
-        // If any probe returned non-zero, try initializing LoRa with this CS
-        if (v_as_is != 0 || v_mask7 != 0 || v_or80 != 0)
+        if (byteValue == '\n')
         {
-            Serial.printf("[LORA] attempting LoRa.begin() with CS=%d\n", cs);
-            LoRa.setPins(cs, resetPin, dio0Pin);
-            if (LoRa.begin(_freq))
-            {
-                Serial.printf("[LORA] begin ok with CS=%d\n", cs);
-                LoRa.receive();
-                return true;
-            }
-            else
-            {
-                Serial.printf("[LORA] begin failed with CS=%d\n", cs);
-            }
+            if (uartRxLength > 0 && _rxCb)
+                _rxCb(uartRxBuffer, uartRxLength);
+            uartRxLength = 0;
+            continue;
+        }
+
+        if (uartRxLength < (int)sizeof(uartRxBuffer))
+        {
+            uartRxBuffer[uartRxLength++] = byteValue;
+        }
+        else
+        {
+            if (_rxCb)
+                _rxCb(uartRxBuffer, uartRxLength);
+            uartRxLength = 0;
         }
     }
+}
 
-    // No candidate CS produced a response — try default pins anyway and return failure
-    LoRa.setPins(candidateCsPins[0], resetPin, dio0Pin);
+#else
+
+#include <LoRa.h>
+#include <SPI.h>
+
+#ifndef LORA_SCK_PIN
+#define LORA_SCK_PIN 23
+#endif
+
+#ifndef LORA_MISO_PIN
+#define LORA_MISO_PIN 35
+#endif
+
+#ifndef LORA_MOSI_PIN
+#define LORA_MOSI_PIN 15
+#endif
+
+#ifndef LORA_CS_PIN
+#define LORA_CS_PIN 22
+#endif
+
+#ifndef LORA_RST_PIN
+#define LORA_RST_PIN 21
+#endif
+
+#ifndef LORA_DIO0_PIN
+#define LORA_DIO0_PIN 32
+#endif
+
+#ifndef LORA_SPI_FREQUENCY
+#define LORA_SPI_FREQUENCY 1000000
+#endif
+
+#ifndef LORA_SIGNAL_BANDWIDTH
+#define LORA_SIGNAL_BANDWIDTH 125000
+#endif
+
+#ifndef LORA_SPREADING_FACTOR
+#define LORA_SPREADING_FACTOR 7
+#endif
+
+#ifndef LORA_CODING_RATE_DENOMINATOR
+#define LORA_CODING_RATE_DENOMINATOR 5
+#endif
+
+#ifndef LORA_SYNC_WORD
+#define LORA_SYNC_WORD 0x12
+#endif
+
+#ifndef LORA_PREAMBLE_LENGTH
+#define LORA_PREAMBLE_LENGTH 8
+#endif
+
+#ifndef LORA_TX_POWER
+#define LORA_TX_POWER 17
+#endif
+
+static void configureLoRaSpi()
+{
+    SPI.begin(LORA_SCK_PIN, LORA_MISO_PIN, LORA_MOSI_PIN, LORA_CS_PIN);
+}
+
+static uint8_t readLoRaRegister(uint8_t reg)
+{
+    configureLoRaSpi();
+    SPI.beginTransaction(SPISettings(LORA_SPI_FREQUENCY, MSBFIRST, SPI_MODE0));
+    digitalWrite(LORA_CS_PIN, LOW);
+    SPI.transfer(reg & 0x7F);
+    uint8_t value = SPI.transfer(0x00);
+    digitalWrite(LORA_CS_PIN, HIGH);
+    SPI.endTransaction();
+    return value;
+}
+
+LoRaModule::LoRaModule(long frequency) : _freq(frequency), _rxCb(nullptr) {}
+
+bool LoRaModule::begin()
+{
+    configureLoRaSpi();
+
+    Serial.printf("[LORA] init SPI SCK=%d MISO=%d MOSI=%d CS=%d RST=%d DIO0=%d FREQ=%ld\n",
+                  LORA_SCK_PIN,
+                  LORA_MISO_PIN,
+                  LORA_MOSI_PIN,
+                  LORA_CS_PIN,
+                  LORA_RST_PIN,
+                  LORA_DIO0_PIN,
+                  _freq);
+
+    pinMode(LORA_CS_PIN, OUTPUT);
+    digitalWrite(LORA_CS_PIN, HIGH);
+    pinMode(LORA_RST_PIN, OUTPUT);
+    digitalWrite(LORA_RST_PIN, HIGH);
+    delay(10);
+    digitalWrite(LORA_RST_PIN, LOW);
+    delay(10);
+    digitalWrite(LORA_RST_PIN, HIGH);
+    delay(20);
+
+    uint8_t version = readLoRaRegister(0x42);
+    Serial.printf("[LORA] RegVersion 0x42 -> 0x%02X (expected 0x12 for SX127x)\n", version);
+    if (version != 0x12)
+    {
+        Serial.println("[LORA] SPI probe did not see the radio. Check power, GND, CS/SCK/MISO/MOSI/RST wiring, and module voltage.");
+    }
+
+    LoRa.setPins(LORA_CS_PIN, LORA_RST_PIN, LORA_DIO0_PIN);
+    LoRa.setSPIFrequency(LORA_SPI_FREQUENCY);
     if (!LoRa.begin(_freq))
     {
         Serial.println("[LORA] begin failed");
         return false;
     }
-    Serial.println("[LORA] begin ok");
+
+    LoRa.setSignalBandwidth(LORA_SIGNAL_BANDWIDTH);
+    LoRa.setSpreadingFactor(LORA_SPREADING_FACTOR);
+    LoRa.setCodingRate4(LORA_CODING_RATE_DENOMINATOR);
+    LoRa.setSyncWord(LORA_SYNC_WORD);
+    LoRa.setPreambleLength(LORA_PREAMBLE_LENGTH);
+    LoRa.setTxPower(LORA_TX_POWER);
+
+    Serial.printf("[LORA] begin ok: bw=%ld sf=%d cr=4/%d sync=0x%02X preamble=%d txPower=%d\n",
+                  (long)LORA_SIGNAL_BANDWIDTH,
+                  LORA_SPREADING_FACTOR,
+                  LORA_CODING_RATE_DENOMINATOR,
+                  LORA_SYNC_WORD,
+                  LORA_PREAMBLE_LENGTH,
+                  LORA_TX_POWER);
     LoRa.receive();
     return true;
 }
 
 bool LoRaModule::send(const uint8_t *data, size_t len)
 {
+    configureLoRaSpi();
     LoRa.beginPacket();
     LoRa.write(data, len);
     int res = LoRa.endPacket();
-    // Return to receive mode after transmitting
     LoRa.receive();
     return (res == 1);
 }
@@ -116,6 +245,7 @@ void LoRaModule::onReceive(RxCallback cb)
 
 void LoRaModule::loop()
 {
+    configureLoRaSpi();
     int packetSize = LoRa.parsePacket();
     if (packetSize)
     {
@@ -129,3 +259,5 @@ void LoRaModule::loop()
             _rxCb(buf, idx);
     }
 }
+
+#endif

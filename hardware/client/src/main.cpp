@@ -280,6 +280,55 @@ bool tryAdxlOnPins(uint8_t sda, uint8_t scl)
     return ok;
 }
 
+bool pinConflictsWithLoRa(uint8_t pin)
+{
+#ifdef LORA_SCK_PIN
+    if (pin == LORA_SCK_PIN)
+        return true;
+#endif
+#ifdef LORA_MISO_PIN
+    if (pin == LORA_MISO_PIN)
+        return true;
+#endif
+#ifdef LORA_MOSI_PIN
+    if (pin == LORA_MOSI_PIN)
+        return true;
+#endif
+#ifdef LORA_CS_PIN
+    if (pin == LORA_CS_PIN)
+        return true;
+#endif
+#ifdef LORA_RST_PIN
+    if (pin == LORA_RST_PIN)
+        return true;
+#endif
+#ifdef LORA_DIO0_PIN
+    if (pin == LORA_DIO0_PIN)
+        return true;
+#endif
+#ifdef LORA_SERIAL_RX_PIN
+    if (pin == LORA_SERIAL_RX_PIN)
+        return true;
+#endif
+#ifdef LORA_SERIAL_TX_PIN
+    if (pin == LORA_SERIAL_TX_PIN)
+        return true;
+#endif
+#ifdef LORA_M0_PIN
+    if (pin == LORA_M0_PIN)
+        return true;
+#endif
+#ifdef LORA_M1_PIN
+    if (pin == LORA_M1_PIN)
+        return true;
+#endif
+#ifdef LORA_AUX_PIN
+    if (pin == LORA_AUX_PIN)
+        return true;
+#endif
+    return false;
+}
+
 bool initBh1750()
 {
     i2cBus.end();
@@ -326,7 +375,76 @@ void setPayload(Shared::SensorPayload &p, const char *metric, int32_t value)
     p.seq = ++seqCounter;
 }
 
-void logAndSend(const char *label, const char *metric, int32_t value, const char *unit)
+struct SensorSnapshot
+{
+    int turbRaw;
+    int32_t turbidityPct;
+    bool hasPh;
+    int phRaw;
+    bool hasAccel;
+    int16_t accelX;
+    int16_t accelY;
+    int16_t accelZ;
+    bool hasLux;
+    int32_t lux;
+    int tempRaw;
+    bool hasTempC;
+    int32_t tempCx10;
+};
+
+bool appendJson(char *buf, size_t bufsize, int &offset, const char *fmt, ...)
+{
+    if (offset < 0 || (size_t)offset >= bufsize)
+        return false;
+
+    va_list args;
+    va_start(args, fmt);
+    int written = vsnprintf(buf + offset, bufsize - (size_t)offset, fmt, args);
+    va_end(args);
+
+    if (written < 0 || (size_t)written >= bufsize - (size_t)offset)
+        return false;
+
+    offset += written;
+    return true;
+}
+
+bool buildSnapshotJson(const SensorSnapshot &snapshot, char *buf, size_t bufsize)
+{
+    int offset = 0;
+    uint32_t seq = ++seqCounter;
+    uint32_t ts = (uint32_t)(millis() / 1000);
+
+    if (!appendJson(buf, bufsize, offset,
+                    "{\"id\":\"%s\",\"type\":\"snapshot\",\"seq\":%lu,\"hops\":0,\"ts\":%lu,\"turb_raw\":%d,\"turbidity\":%ld,\"temp_raw\":%d",
+                    DEVICE_ID_STR,
+                    (unsigned long)seq,
+                    (unsigned long)ts,
+                    snapshot.turbRaw,
+                    (long)snapshot.turbidityPct,
+                    snapshot.tempRaw))
+        return false;
+
+    if (snapshot.hasPh && !appendJson(buf, bufsize, offset, ",\"ph_raw\":%d", snapshot.phRaw))
+        return false;
+
+    if (snapshot.hasTempC && !appendJson(buf, bufsize, offset, ",\"temp_c_x10\":%ld", (long)snapshot.tempCx10))
+        return false;
+
+    if (snapshot.hasLux && !appendJson(buf, bufsize, offset, ",\"lux\":%ld", (long)snapshot.lux))
+        return false;
+
+    if (snapshot.hasAccel &&
+        !appendJson(buf, bufsize, offset, ",\"accel_x\":%d,\"accel_y\":%d,\"accel_z\":%d",
+                    (int)snapshot.accelX,
+                    (int)snapshot.accelY,
+                    (int)snapshot.accelZ))
+        return false;
+
+    return appendJson(buf, bufsize, offset, "}");
+}
+
+void logData(const char *label, int32_t value, const char *unit)
 {
     if (unit && unit[0] != '\0')
     {
@@ -336,44 +454,36 @@ void logAndSend(const char *label, const char *metric, int32_t value, const char
     {
         logInfo("DATA", "%s=%ld", label, (long)value);
     }
+}
 
+void sendSnapshot(const SensorSnapshot &snapshot)
+{
     if (!useLoRa)
         return;
 
-    Shared::SensorPayload p;
-    setPayload(p, metric, value);
-
-    // First, serialize payload without signature to produce canonical bytes to sign
-    p.sig[0] = '\0';
-    char buf[256];
-    size_t n = Shared::serializePayload(p, buf, sizeof(buf));
-    if (n)
+    char buf[384];
+    if (!buildSnapshotJson(snapshot, buf, sizeof(buf)))
     {
-        // Attempt to sign using ed25519 wrapper. PRIVATE_KEY_B64 can be provided at build time.
-        char sigbuf[128];
-        bool signed_ok = false;
-#ifdef PRIVATE_KEY_B64
-        if (ed25519_sign_base64(PRIVATE_KEY_B64, (const uint8_t *)buf, n, sigbuf, sizeof(sigbuf)))
-        {
-            // attach signature and reserialize
-            strncpy(p.sig, sigbuf, sizeof(p.sig) - 1);
-            p.sig[sizeof(p.sig) - 1] = '\0';
-            size_t m = Shared::serializePayload(p, buf, sizeof(buf));
-            if (m)
-            {
-                n = m;
-                signed_ok = true;
-            }
-        }
-#endif
-        // If signing failed or not available, still send unsigned payload (for testing)
-        bool ok = lora.send((const uint8_t *)buf, n);
-        if (ok)
-            logInfo("LORA", "tx ok: %s", buf);
-        else
-            logWarn("LORA", "tx failed: %s", buf);
-        if (!signed_ok)
-            logWarn("LORA", "payload sent without signature (signing not available)");
+        logWarn("LORA", "snapshot payload too large");
+        return;
+    }
+
+    size_t n = strlen(buf);
+    bool ok = lora.send((const uint8_t *)buf, n);
+    if (ok)
+        logInfo("LORA", "snapshot tx ok: %s", buf);
+    else
+        logWarn("LORA", "snapshot tx failed: %s", buf);
+}
+
+void serviceLoRaDuringDelay(uint32_t durationMs)
+{
+    const uint32_t startedAt = millis();
+    while ((uint32_t)(millis() - startedAt) < durationMs)
+    {
+        if (useLoRa)
+            lora.loop();
+        delay(10);
     }
 }
 
@@ -401,6 +511,11 @@ void setup()
     {
         uint8_t sda = pinPairs[i][0];
         uint8_t scl = pinPairs[i][1];
+        if (pinConflictsWithLoRa(sda) || pinConflictsWithLoRa(scl))
+        {
+            logWarn("ADXL345", "skipping I2C SDA=%d SCL=%d because it conflicts with LoRa pins", (int)sda, (int)scl);
+            continue;
+        }
         if (tryAdxlOnPins(sda, scl))
         {
             adxlReady = true;
@@ -436,8 +551,16 @@ void setup()
             logWarn("ADXL345", "initialization failed");
     }
 
-    bh1750Ready = initBh1750();
-    logMessage(bh1750Ready ? "INFO" : "WARN", "BH1750", bh1750Ready ? "ready" : "initialization failed");
+    if (pinConflictsWithLoRa(BH1750_SDA_PIN) || pinConflictsWithLoRa(BH1750_SCL_PIN))
+    {
+        bh1750Ready = false;
+        logWarn("BH1750", "skipping I2C SDA=%d SCL=%d because it conflicts with LoRa pins", (int)BH1750_SDA_PIN, (int)BH1750_SCL_PIN);
+    }
+    else
+    {
+        bh1750Ready = initBh1750();
+        logMessage(bh1750Ready ? "INFO" : "WARN", "BH1750", bh1750Ready ? "ready" : "initialization failed");
+    }
 #else
     logWarn("SYS", "DIAGNOSTIC_BUILD enabled: skipping ADXL345 and BH1750 probes");
     bh1750Ready = false;
@@ -532,22 +655,31 @@ void setup()
 
 void loop()
 {
+    if (useLoRa)
+        lora.loop();
+
+    SensorSnapshot snapshot = {};
+
     int val = sensor.readValue();
+    snapshot.turbRaw = val;
 
     float pct = (val / 1800.0f) * 100.0f;
     if (pct < 0.0f)
         pct = 0.0f;
     if (pct > 100.0f)
         pct = 100.0f;
+    snapshot.turbidityPct = (int32_t)lroundf(pct);
 
     logInfo("TURB", "raw=%d -> %.1f%% clear", val, pct);
-    logAndSend("Turbidity raw", "turb_raw", val, "raw");
-    logAndSend("Turbidity clear", "turb_pct", (int32_t)lroundf(pct), "%");
+    logData("Turbidity raw", val, "raw");
+    logData("Turbidity clear", snapshot.turbidityPct, "%");
 
 #ifdef PH_SENSOR_PIN
     int phVal = phSensor.readValue();
+    snapshot.hasPh = true;
+    snapshot.phRaw = phVal;
     logInfo("PH", "raw=%d", phVal);
-    logAndSend("pH raw", "ph_raw", phVal, "raw");
+    logData("pH raw", phVal, "raw");
 #endif
 
 #ifndef DIAGNOSTIC_BUILD
@@ -558,10 +690,14 @@ void loop()
         int16_t az = 0;
         if (readAdxl345(ax, ay, az))
         {
+            snapshot.hasAccel = true;
+            snapshot.accelX = ax;
+            snapshot.accelY = ay;
+            snapshot.accelZ = az;
             logInfo("ADXL345", "x=%d y=%d z=%d", (int)ax, (int)ay, (int)az);
-            logAndSend("ADXL345 X", "accel_x", ax, "raw");
-            logAndSend("ADXL345 Y", "accel_y", ay, "raw");
-            logAndSend("ADXL345 Z", "accel_z", az, "raw");
+            logData("ADXL345 X", ax, "raw");
+            logData("ADXL345 Y", ay, "raw");
+            logData("ADXL345 Z", az, "raw");
         }
         else
         {
@@ -575,8 +711,10 @@ void loop()
         if (readBh1750(lux))
         {
             int32_t luxInt = (int32_t)lroundf(lux);
+            snapshot.hasLux = true;
+            snapshot.lux = luxInt;
             logInfo("BH1750", "lux=%.1f", lux);
-            logAndSend("BH1750 lux", "lux", luxInt, "lx");
+            logData("BH1750 lux", luxInt, "lx");
         }
         else
         {
@@ -589,6 +727,7 @@ void loop()
 
     // Try analog read (thermistor/LM35 style probe)
     int analogRaw = analogRead(TEMP_SENSOR_PIN);
+    snapshot.tempRaw = analogRaw;
     logInfo("TEMP", "analog pin %d raw=%d", TEMP_SENSOR_PIN, analogRaw);
 
     // Try OneWire (DS18B20 / waterproof probe)
@@ -600,9 +739,12 @@ void loop()
         if (!isnan(owTemp) && owTemp > -55 && owTemp < 125)
         {
             int32_t tempCx10 = (int32_t)lroundf(owTemp * 10.0f);
-            logAndSend("Temperature(1W)", "temp_c_x10", tempCx10, "x10C");
+            snapshot.hasTempC = true;
+            snapshot.tempCx10 = tempCx10;
+            logData("Temperature(1W)", tempCx10, "x10C");
         }
     }
 
-    delay(5000);
+    sendSnapshot(snapshot);
+    serviceLoRaDuringDelay(5000);
 }

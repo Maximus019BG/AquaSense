@@ -1,5 +1,5 @@
 requests
 python-dotenv
+pyserial
 pynacl
-pytest
 pytest
