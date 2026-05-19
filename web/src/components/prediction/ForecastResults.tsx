@@ -14,6 +14,8 @@ type ForecastPrediction = {
   features: ForecastFeatureValues;
   is_anomaly?: boolean;
   score?: number;
+  feature_anomalies?: Record<string, boolean>;
+  feature_stats?: Record<string, { mean: number; std: number; delta: number; z: number; value?: number }>;
 };
 
 type ForecastResultsData = {
@@ -145,6 +147,7 @@ function FeatureSparkline({
   const chartData = values.map((value, index) => ({
     timestamp: timestamps[index],
     value,
+    raw: { [featureKey]: value },
   }));
 
   const current = values[values.length - 1] ?? 0;
@@ -236,6 +239,9 @@ function UnifiedForecastChart({
     return {
       timestamp: timestamps[index],
       raw: item.features,
+      is_anomaly: item.is_anomaly,
+      score: item.score,
+      feature_anomalies: item.feature_anomalies ?? {},
       ...normalized,
     };
   });
@@ -298,7 +304,8 @@ function UnifiedForecastChart({
                       pointerEvents: isVisible ? "auto" : "none",
                     }}
                     dot={(dotProps: ForecastDotProps) => {
-                      if (!isVisible || !dotProps.payload?.is_anomaly || dotProps.cx === undefined || dotProps.cy === undefined) {
+                      const featureAnoms = dotProps.payload?.feature_anomalies ?? {};
+                      if (!isVisible || !featureAnoms || !featureAnoms[key] || dotProps.cx === undefined || dotProps.cy === undefined) {
                         return false;
                       }
 
@@ -353,6 +360,40 @@ export function ForecastResults({ results }: { results: ForecastResultsData }) {
 
   const timestamps = preds.map((item) => item.timestamp);
   const activeFeatureKeys = featureKeys.filter((key) => visibleFeatures[key]);
+
+  function downsamplePredictions(input: ForecastPrediction[], maxPoints = 365) {
+    if (input.length <= maxPoints) return input;
+    const block = Math.ceil(input.length / maxPoints);
+    const out: ForecastPrediction[] = [];
+    for (let i = 0; i < input.length; i += block) {
+      const chunk = input.slice(i, i + block);
+      // average features
+      const avgFeatures: ForecastFeatureValues = {};
+      const keys = Object.keys(chunk[0]?.features ?? {});
+      keys.forEach((k) => {
+        const vals = chunk.map((c) => Number(c.features?.[k] ?? 0));
+        const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+        avgFeatures[k] = Number(mean.toFixed(6));
+      });
+      // aggregate anomaly: true if any point in block had it
+      const anyAnom = chunk.some((c) => c.is_anomaly);
+      const feature_anomalies = Object.fromEntries(
+        Object.keys(avgFeatures).map((k) => [k, chunk.some((c) => c.feature_anomalies?.[k])]),
+      );
+
+      out.push({
+        timestamp: chunk[0].timestamp,
+        features: avgFeatures,
+        is_anomaly: anyAnom,
+        score: chunk[0].score ?? 0,
+        feature_anomalies,
+      });
+    }
+    return out;
+  }
+
+  const plotPreds = downsamplePredictions(preds, 365);
+  const plotTimestamps = plotPreds.map((p) => p.timestamp);
 
   const formatRowTimestamp = (value: string) => {
     const date = parseISO(value);
@@ -447,8 +488,8 @@ export function ForecastResults({ results }: { results: ForecastResultsData }) {
         {activeFeatureKeys.length > 0 ? (
           <UnifiedForecastChart
             featureKeys={activeFeatureKeys}
-            preds={preds}
-            timestamps={timestamps}
+            preds={plotPreds}
+            timestamps={plotTimestamps}
             visibleFeatures={visibleFeatures}
           />
         ) : (
@@ -458,31 +499,40 @@ export function ForecastResults({ results }: { results: ForecastResultsData }) {
         )}
 
         <p className="mb-2 text-xs text-slate-400">Toggle features to focus on the ones you care about most.</p>
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {featureKeys.map((key: string, index: number) =>
-            visibleFeatures[key] ? (
-              <FeatureSparkline
-                key={key}
-                featureKey={key}
-                color={palette[index % palette.length] ?? defaultColor}
-                values={preds.map((item) => Number(item.features?.[key] ?? 0))}
-                timestamps={timestamps}
-              />
-            ) : null,
-          )}
-        </div>
+        
       </div>
 
       <div className="max-h-72 overflow-auto pt-1">
         {preds.length === 0 && <div className="text-sm text-slate-500">No forecast data</div>}
         {preds.map((item, index) => (
           <div key={index} className="border-b border-white/10 px-2 py-3 text-sm last:border-b-0">
-            <div className="mb-1 text-slate-200">{formatRowTimestamp(item.timestamp)}</div>
+            <div className="mb-1 flex items-center gap-3">
+              <div className="text-slate-200">{formatRowTimestamp(item.timestamp)}</div>
+                {item.is_anomaly ? (
+                  <div className="rounded-full border border-red-400/20 bg-red-400/10 px-2 py-0.5 text-[11px] text-red-200">
+                    Anomaly
+                  </div>
+                ) : null}
+            </div>
             <div className="grid grid-cols-1 gap-x-6 gap-y-1 text-xs text-slate-400 sm:grid-cols-2">
               {featureKeys.map((key: string) => (
                 <div key={key} className="flex items-center justify-between gap-2">
                   <span>{formatFeatureLabel(key)}</span>
-                  <span className="font-mono text-slate-200">{Number(item.features?.[key]).toFixed(3)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-slate-200">{Number(item.features?.[key] ?? 0).toFixed(3)}</span>
+                    {item.feature_anomalies?.[key] ? (
+                      <span className="rounded-full border border-red-400/20 bg-red-400/10 px-2 py-0.5 text-[11px] text-red-200">
+                        Anomaly
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="w-full text-right">
+                    {item.feature_stats?.[key] ? (
+                      <div className="text-xs text-slate-400">
+                        Normal: {Number(item.feature_stats[key].mean).toFixed(3)} ± {Number(item.feature_stats[key].std).toFixed(3)} · Δ {Number(item.feature_stats[key].delta).toFixed(3)} (z={Number(item.feature_stats[key].z).toFixed(2)})
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>

@@ -14,23 +14,6 @@ interface Anomaly {
   position: [number, number, number];
 }
 
-const anomalies: Anomaly[] = [
-  {
-    id: "1",
-    type: "critical",
-    parameter: "pH",
-    value: 6.2,
-    position: [2, 0.5, 1],
-  },
-  {
-    id: "2",
-    type: "warning",
-    parameter: "Temperature",
-    value: 29.5,
-    position: [-1.5, 0.5, -2],
-  },
-];
-
 function Marker({ anomaly }: { anomaly: Anomaly }) {
   const groupRef = useRef<Group>(null);
 
@@ -86,10 +69,11 @@ function Marker({ anomaly }: { anomaly: Anomaly }) {
   );
 }
 
-export function AnomalyMarkers() {
+export function AnomalyMarkers({ markers }: { markers?: Anomaly[] }) {
+  const list = markers && Array.isArray(markers) ? markers : [];
   return (
     <>
-      {anomalies.map((anomaly) => (
+      {list.map((anomaly) => (
         <Marker key={anomaly.id} anomaly={anomaly} />
       ))}
     </>

@@ -1,19 +1,27 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { cn } from "~/lib/utils";
 
 type TimeRange = "1H" | "6H" | "24H" | "7D";
 const TIME_RANGES: TimeRange[] = ["1H", "6H", "24H", "7D"];
 
+type ReadingPoint = {
+  timestamp: string;
+  temperature: number;
+  ph: number;
+  turbidity: number;
+  dissolvedOxygen: number;
+  waterLevel: number;
+};
+
 const PARAMS = [
-  { id: "temperature", label: "Temp",    color: "#FF6B6B", unit: "°C",   min: 20,  max: 30  },
-  { id: "ph",          label: "pH",      color: "#4ECDC4", unit: "",     min: 6,   max: 9   },
-  { id: "turbidity",   label: "Turb",    color: "#FFE66D", unit: "NTU",  min: 0,   max: 50  },
-  { id: "oxygen",      label: "O₂",      color: "#95E1D3", unit: "mg/L", min: 5,   max: 12  },
-  { id: "level",       label: "Level",   color: "#6C5CE7", unit: "cm",   min: 200, max: 300 },
-  { id: "humidity",    label: "Humidity", color: "#06b6d4", unit: "%",   min: 30,  max: 95  },
+  { id: "temperature", label: "Temp", color: "#FF6B6B", unit: "°C", min: 20, max: 30 },
+  { id: "ph", label: "pH", color: "#4ECDC4", unit: "", min: 6, max: 9 },
+  { id: "turbidity", label: "Turb", color: "#FFE66D", unit: "NTU", min: 0, max: 50 },
+  { id: "dissolvedOxygen", label: "O₂", color: "#95E1D3", unit: "mg/L", min: 5, max: 12 },
+  { id: "waterLevel", label: "Level", color: "#6C5CE7", unit: "cm", min: 200, max: 300 },
 ];
 
 const PT_COUNTS: Record<TimeRange, number> = { "1H": 12, "6H": 24, "24H": 48, "7D": 84 };
@@ -29,6 +37,29 @@ function deterministicData(points: number, min: number, max: number, seed: numbe
     );
     const label = points <= 12 ? `${i * 5}m` : points <= 24 ? `${i}h` : points <= 48 ? `${Math.floor(i / 2)}h` : `D${Math.floor(i / 12) + 1}`;
     return { time: label, value: +Math.max(min, Math.min(max, v)).toFixed(2) };
+  });
+}
+
+function toSafeNumber(value: unknown, fallback = 0): number {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+}
+
+function normalizeReadings(data: unknown): ReadingPoint[] {
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data.map((entry) => {
+    const row = entry as Record<string, unknown>;
+    return {
+      timestamp: String(row.timestamp ?? row.created_at ?? ""),
+      temperature: toSafeNumber(row.temperature ?? row.temperature_C),
+      ph: toSafeNumber(row.ph),
+      turbidity: toSafeNumber(row.turbidity ?? row.turbidity_kd),
+      dissolvedOxygen: toSafeNumber(row.dissolvedOxygen ?? row.dissolved_oxygen ?? row.dissolved_o2),
+      waterLevel: toSafeNumber(row.waterLevel ?? row.water_level ?? row.sea_level_m),
+    };
   });
 }
 
@@ -53,18 +84,62 @@ function MiniSparkline({ data, color }: { data: { value: number }[]; color: stri
 export function ChartSection() {
   const [activeRange, setActiveRange] = useState<TimeRange>("24H");
   const [activeId, setActiveId] = useState("temperature");
+  const [readings, setReadings] = useState<ReadingPoint[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadReadings() {
+      try {
+        const response = await fetch("/api/readings?limit=200");
+        const data = await response.json();
+        if (!mounted || !data?.success) {
+          return;
+        }
+
+        setReadings(normalizeReadings(data.data));
+      } catch (error) {
+        if (mounted) {
+          setReadings([]);
+        }
+      }
+    }
+
+    loadReadings();
+    const interval = setInterval(loadReadings, 15000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const active = PARAMS.find(p => p.id === activeId) ?? PARAMS[0]!;
   const pts = PT_COUNTS[activeRange];
 
   const mainData = useMemo(
-    () => deterministicData(pts, active.min, active.max, active.id.charCodeAt(0) * 0.13),
-    [pts, activeId]
+    () => {
+      const series = readings.map((point) => ({
+        time: new Date(point.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        value: toSafeNumber(point[active.id as keyof ReadingPoint], 0),
+      }));
+
+      const windowed = series.slice(-pts);
+      return windowed.length > 0 ? windowed : deterministicData(pts, active.min, active.max, active.id.charCodeAt(0) * 0.13);
+    },
+    [pts, activeId, readings]
   );
 
   const overviewData = useMemo(
-    () => PARAMS.map(p => ({ ...p, data: deterministicData(16, p.min, p.max, p.id.charCodeAt(0) * 0.13) })),
-    []
+    () => PARAMS.map((param) => ({
+      ...param,
+      data: readings.length
+        ? readings.slice(-16).map((point) => ({
+            value: toSafeNumber(point[param.id as keyof ReadingPoint], 0),
+          }))
+        : deterministicData(16, param.min, param.max, param.id.charCodeAt(0) * 0.13),
+    })),
+    [readings]
   );
 
   const lastVal = mainData[mainData.length - 1]?.value ?? 0;

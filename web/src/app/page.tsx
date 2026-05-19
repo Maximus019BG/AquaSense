@@ -41,27 +41,6 @@ const INITIAL_SENSORS: SensorValues = {
   lastUpdate: null,
 };
 
-const mockAlerts: Alert[] = [
-  {
-    id: "1",
-    type: "critical",
-    message: "pH dropped below 6.5",
-    parameter: "pH",
-    value: 6.2,
-    timestamp: new Date(Date.now() - 2 * 60 * 1000),
-    acknowledged: false,
-  },
-  {
-    id: "2",
-    type: "warning",
-    message: "Temperature above normal range",
-    parameter: "Temperature",
-    value: 29.5,
-    timestamp: new Date(Date.now() - 15 * 60 * 1000),
-    acknowledged: false,
-  },
-];
-
 function getStatus(id: string, value: number): "normal" | "warning" | "critical" {
   const ranges: Record<string, [number, number]> = {
     temperature: [20, 28],
@@ -93,6 +72,90 @@ function getTimeDescription(hour: number): string {
   return "Day";
 }
 
+function toSafeNumber(value: unknown, fallback: number): number {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+}
+
+function normalizeReading(data: any): SensorValues {
+  return {
+    temperature: toSafeNumber(data?.temperature ?? data?.temperature_C, INITIAL_SENSORS.temperature),
+    ph: toSafeNumber(data?.ph, INITIAL_SENSORS.ph),
+    turbidity: toSafeNumber(data?.turbidity ?? data?.turbidity_kd, INITIAL_SENSORS.turbidity),
+    dissolvedOxygen: toSafeNumber(data?.dissolvedOxygen ?? data?.dissolved_oxygen, INITIAL_SENSORS.dissolvedOxygen),
+    waterLevel: toSafeNumber(data?.waterLevel ?? data?.water_level, INITIAL_SENSORS.waterLevel),
+    alertLevel: "none",
+    lastUpdate: data?.created_at ? new Date(data.created_at) : data?.timestamp ? new Date(data.timestamp) : new Date(),
+  };
+}
+
+function buildLiveAlerts(sensors: SensorValues): Alert[] {
+  const now = sensors.lastUpdate ?? new Date();
+  const alerts: Alert[] = [];
+
+  if (sensors.ph < 6.5 || sensors.ph > 8.5) {
+    alerts.push({
+      id: "ph-live",
+      type: "critical",
+      message: sensors.ph < 6.5 ? "pH dropped below 6.5" : "pH climbed above 8.5",
+      parameter: "pH",
+      value: sensors.ph,
+      timestamp: now,
+      acknowledged: false,
+    });
+  }
+
+  if (sensors.temperature > 27.5) {
+    alerts.push({
+      id: "temp-live",
+      type: "warning",
+      message: "Temperature above normal range",
+      parameter: "Temperature",
+      value: sensors.temperature,
+      timestamp: now,
+      acknowledged: false,
+    });
+  }
+
+  if (sensors.turbidity > 35) {
+    alerts.push({
+      id: "turbidity-live",
+      type: "warning",
+      message: "Turbidity is rising",
+      parameter: "Turbidity",
+      value: sensors.turbidity,
+      timestamp: now,
+      acknowledged: false,
+    });
+  }
+
+  if (sensors.dissolvedOxygen < 6) {
+    alerts.push({
+      id: "oxygen-live",
+      type: "critical",
+      message: "Dissolved oxygen is below safe range",
+      parameter: "Dissolved O2",
+      value: sensors.dissolvedOxygen,
+      timestamp: now,
+      acknowledged: false,
+    });
+  }
+
+  if (sensors.waterLevel < 210 || sensors.waterLevel > 290) {
+    alerts.push({
+      id: "water-level-live",
+      type: "warning",
+      message: "Water level is outside the guard band",
+      parameter: "Water Level",
+      value: sensors.waterLevel,
+      timestamp: now,
+      acknowledged: false,
+    });
+  }
+
+  return alerts;
+}
+
 export default function DashboardPage() {
   const [sensors, setSensors] = useState<SensorValues>(INITIAL_SENSORS);
   const [quality, setQuality] = useState<"PERF" | "HIGH" | "ULTRA">("ULTRA");
@@ -107,15 +170,8 @@ export default function DashboardPage() {
       const result = await response.json();
       
       if (result.success && result.data) {
-        setSensors({
-          temperature: result.data.temperature,
-          ph: result.data.ph,
-          turbidity: result.data.turbidity,
-          dissolvedOxygen: result.data.dissolvedOxygen,
-          waterLevel: result.data.waterLevel,
-          alertLevel: "none",
-          lastUpdate: new Date(result.data.timestamp),
-        });
+        const reading = Array.isArray(result.data) ? result.data[result.data.length - 1] : result.data;
+        setSensors(normalizeReading(reading));
         setError(null);
         setSyncAgo(0);
       } else {
@@ -142,6 +198,31 @@ export default function DashboardPage() {
       clearInterval(syncInterval);
     };
   }, [fetchLatestData]);
+
+  // Subscribe to server-sent events for live readings
+  useEffect(() => {
+    const url = '/api/readings/stream';
+    const es = new EventSource(url);
+    es.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg?.success && msg.data) {
+          const d = msg.data;
+          setSensors((prev) => ({
+            ...prev,
+            ...normalizeReading(d),
+          }));
+          setSyncAgo(0);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    es.onerror = () => {
+      es.close();
+    };
+    return () => es.close();
+  }, []);
 
   const alertCount = useMemo(() => {
     let c = 0;
@@ -225,35 +306,37 @@ export default function DashboardPage() {
     [sensors]
   );
 
+  const alerts = useMemo(() => buildLiveAlerts(sensors), [sensors]);
+
   const liveMetrics = useMemo(
     () => [
       {
         label: "Temperature",
-        value: `${sensors.temperature.toFixed(1)}°C`,
+        value: `${toSafeNumber(sensors.temperature, INITIAL_SENSORS.temperature).toFixed(1)}°C`,
         color: "#FF6B6B",
         detail: sensors.temperature > 27.5 ? "Heating up" : "Stable thermal band",
       },
       {
         label: "pH",
-        value: sensors.ph.toFixed(2),
+        value: toSafeNumber(sensors.ph, INITIAL_SENSORS.ph).toFixed(2),
         color: "#4ECDC4",
         detail: sensors.ph < 6.5 || sensors.ph > 8.5 ? "Needs attention" : "Balanced chemistry",
       },
       {
         label: "Turbidity",
-        value: `${sensors.turbidity.toFixed(1)} NTU`,
+        value: `${toSafeNumber(sensors.turbidity, INITIAL_SENSORS.turbidity).toFixed(1)} NTU`,
         color: "#FFE66D",
         detail: sensors.turbidity > 35 ? "Particles rising" : "Clear water column",
       },
       {
         label: "Oxygen",
-        value: `${sensors.dissolvedOxygen.toFixed(1)} mg/L`,
+        value: `${toSafeNumber(sensors.dissolvedOxygen, INITIAL_SENSORS.dissolvedOxygen).toFixed(1)} mg/L`,
         color: "#95E1D3",
         detail: sensors.dissolvedOxygen < 6 ? "Low oxygen margin" : "Healthy saturation",
       },
       {
         label: "Water Level",
-        value: `${Math.round(sensors.waterLevel)} cm`,
+        value: `${Math.round(toSafeNumber(sensors.waterLevel, INITIAL_SENSORS.waterLevel))} cm`,
         color: "#6C5CE7",
         detail: sensors.waterLevel < 210 || sensors.waterLevel > 290 ? "Outside guard band" : "Within expected range",
       },
@@ -317,7 +400,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-12 gap-4 xl:gap-5">
         <aside className="col-span-12 space-y-4 xl:col-span-3">
           <SensorStatus sensors={sensors} />
-          <AlertTimeline alerts={mockAlerts} />
+          <AlertTimeline alerts={alerts} />
 
           <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/80 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.3)] backdrop-blur-xl">
             <div className="flex items-center justify-between gap-2">
@@ -350,6 +433,23 @@ export default function DashboardPage() {
               alertLevel={sensorData.alertLevel}
               quality={quality}
               timeOfDay={timeOfDay}
+              markers={(() => {
+                // map parameter ids to positions in the scene
+                const layout: Record<string, [number, number, number]> = {
+                  temperature: [-1.5, 0.6, -2],
+                  ph: [1.8, 0.6, -1],
+                  turbidity: [0.8, 0.6, 1.5],
+                  dissolvedOxygen: [0, 0.6, 2.2],
+                };
+                const markers: any[] = [];
+                // Always show temperature marker; mark as warning if above threshold
+                markers.push({ id: 'temp', type: sensors.temperature > 27.5 ? 'warning' : 'info', parameter: 'Temperature', value: sensors.temperature, position: layout.temperature });
+                if (sensors.ph < 6.5 || sensors.ph > 8.5) markers.push({ id: 'ph', type: 'critical', parameter: 'pH', value: sensors.ph, position: layout.ph });
+                if (sensors.turbidity > 35) markers.push({ id: 'turb', type: 'warning', parameter: 'Turbidity', value: sensors.turbidity, position: layout.turbidity });
+                if (sensors.dissolvedOxygen < 6) markers.push({ id: 'o2', type: 'warning', parameter: 'Dissolved O2', value: sensors.dissolvedOxygen, position: layout.dissolvedOxygen });
+                // water level marker removed — temperature is displayed instead
+                return markers;
+              })()}
             />
 
             <div className="absolute left-4 top-4 z-30 flex items-center gap-2 rounded-full border border-cyan-400/15 bg-slate-950/80 px-3 py-2 backdrop-blur-xl">

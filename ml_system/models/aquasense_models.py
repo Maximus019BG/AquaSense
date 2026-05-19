@@ -48,6 +48,7 @@ class ModelLoader:
         self._isolation_forest = None
         self._scaler = None
         self._features = None
+        self._anomaly_threshold = None
         self._load_metadata()
     
     def _load_metadata(self):
@@ -56,6 +57,15 @@ class ModelLoader:
         if features_file.exists():
             with open(features_file, 'r') as f:
                 self._features = json.load(f)
+        # load optional anomaly threshold
+        thresh_file = self.model_dir / 'anomaly_threshold.json'
+        if thresh_file.exists():
+            try:
+                with open(thresh_file, 'r') as f:
+                    data = json.load(f)
+                    self._anomaly_threshold = float(data.get('threshold'))
+            except Exception:
+                self._anomaly_threshold = None
     
     @property
     def isolation_forest(self):
@@ -136,9 +146,13 @@ class ModelLoader:
         # Scale the input
         scaled = self.scaler.transform(feature_vector)
         
-        # Get prediction (-1 = anomaly, 1 = normal)
+        # If a threshold was saved during training, use score_samples for robust detection
+        if self._anomaly_threshold is not None:
+            score = self.isolation_forest.score_samples(scaled)[0]
+            return float(score) < float(self._anomaly_threshold)
+
+        # Fallback: use the model's predict (legacy behavior)
         prediction = self.isolation_forest.predict(scaled)[0]
-        
         return prediction == -1
     
     def get_anomaly_score(self, reading: Dict[str, float]) -> float:

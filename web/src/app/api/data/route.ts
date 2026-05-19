@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const [reading] = await db
       .insert(sensorReadingsTable)
       .values({
-        sensor_id: sensor.id,
+        sensor_id: sensor!.id,
         value: Math.round(Number(value)),
         recorded_at: new Date(Number(ts) * 1000),
       })

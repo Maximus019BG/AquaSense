@@ -382,6 +382,23 @@ def _validate_service_key(request: Request):
             raise HTTPException(status_code=401, detail="Invalid service key")
 
 
+@app.post("/reload_models")
+def reload_models(request: Request):
+    """Reload models and artifacts from disk without restarting the server.
+
+    This recreates the `loader` singleton and refreshes forecast assets.
+    """
+    _validate_service_key(request)
+    global loader
+    try:
+        loader = ModelLoader()
+        _load_forecast_assets()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "ok", "models": loader.available_models()}
+
+
 async def fetch_sensor_data(sensor_id: str, start: str, end: str, resolution: str, table: str = None):
     """Fetch sensor data from Supabase REST or Postgres and return a list of readings.
 
@@ -601,11 +618,65 @@ async def get_models(request: Request):
     metadata = {}
     if meta_file.exists():
         try:
-            import json
-
             with open(meta_file, 'r') as f:
                 metadata = json.load(f)
         except Exception:
             metadata = {}
 
     return {"models": models, "metadata": metadata}
+
+
+@app.post("/forecast_with_anomalies")
+def forecast_with_anomalies(req: ForecastRequest, request: Request):
+    """Produce an LSTM forecast and run the Isolation Forest anomaly detector on each forecast row.
+
+    Returns the same forecast rows augmented with `is_anomaly` and `score` for each point,
+    plus a summary count of flagged anomalies.
+    """
+    _validate_service_key(request)
+    _rate_limit(request)
+
+    steps, forecast_rows = _recursive_forecast(req.period)
+
+    predictions = []
+    anomaly_count = 0
+
+    for row in forecast_rows:
+        features = row.get("features", {})
+        reading = {
+            "temperature_C": features.get("temperature_C"),
+            "dissolved_o2": features.get("dissolved_o2"),
+            "salinity_psu": features.get("salinity_psu"),
+            "sea_level_m": features.get("sea_level_m"),
+        }
+
+        try:
+            is_anom = loader.detect_anomaly(reading)
+            score = loader.get_anomaly_score(reading)
+        except Exception:
+            is_anom = False
+            score = 0.0
+
+        if is_anom:
+            anomaly_count += 1
+
+        predictions.append({
+            "timestamp": row.get("timestamp"),
+            "features": features,
+            "is_anomaly": bool(is_anom),
+            "score": float(score),
+        })
+
+    try:
+        model_file = FORECAST_ARTIFACT_DIR / "lstm_forecaster.keras"
+        model_version = file_checksum(model_file)
+    except Exception:
+        model_version = "local"
+
+    return {
+        "model_version": model_version,
+        "period": req.period,
+        "steps": steps,
+        "predictions": predictions,
+        "summary": {"n_points": len(predictions), "anomaly_count": anomaly_count},
+    }

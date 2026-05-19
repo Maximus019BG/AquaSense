@@ -1,6 +1,6 @@
 "use client";
 
-import { Thermometer, FlaskConical, Eye, Wind, Ruler, Droplets } from "lucide-react";
+import { Thermometer, FlaskConical, Eye, Wind, Ruler } from "lucide-react";
 
 interface SensorValues {
   temperature: number;
@@ -8,7 +8,6 @@ interface SensorValues {
   turbidity: number;
   dissolvedOxygen: number;
   waterLevel: number;
-  humidity: number;
 }
 
 interface SensorStatusProps {
@@ -21,7 +20,6 @@ const SENSORS = [
   { id: "turbidity",       key: "turbidity"       as keyof SensorValues, label: "TURB",     unit: "NTU",  icon: Eye,          color: "#FFE66D", range: [0, 30]    as [number,number] },
   { id: "dissolvedOxygen", key: "dissolvedOxygen" as keyof SensorValues, label: "O₂",       unit: "mg/L", icon: Wind,         color: "#95E1D3", range: [6, 12]    as [number,number] },
   { id: "waterLevel",      key: "waterLevel"      as keyof SensorValues, label: "LEVEL",    unit: "cm",   icon: Ruler,        color: "#6C5CE7", range: [200, 300] as [number,number] },
-  { id: "humidity",        key: "humidity"        as keyof SensorValues, label: "HUMIDITY", unit: "%",    icon: Droplets,     color: "#06b6d4", range: [40, 75]   as [number,number] },
 ];
 
 function SignalBars({ level }: { level: number }) {

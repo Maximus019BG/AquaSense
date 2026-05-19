@@ -31,6 +31,7 @@ interface WaterSceneProps {
   alertLevel?: "none" | "warning" | "critical";
   quality?: "PERF" | "HIGH" | "ULTRA";
   timeOfDay?: number;
+  markers?: Array<{ id: string; type: "critical" | "warning" | "info"; parameter: string; value: number; position: [number, number, number] }>;
 }
 
 // ─── Sea floor ────────────────────────────────────────────────────────────────
@@ -326,10 +327,11 @@ function AtmosphericConditions({ timeOfDay }: { timeOfDay: number }) {
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
-function Scene({ sensorData, quality, timeOfDay = 12 }: {
+function Scene({ sensorData, quality, timeOfDay = 12, markers = [] }: {
   sensorData: SensorData;
   quality: "PERF" | "HIGH" | "ULTRA";
   timeOfDay: number;
+  markers?: Array<{ id: string; type: "critical" | "warning" | "info"; parameter: string; value: number; position: [number, number, number] }>;
 }) {
   const isNight = timeOfDay < 5 || timeOfDay > 19;
   const isSunrise = (timeOfDay >= 5 && timeOfDay <= 7) || (timeOfDay >= 17 && timeOfDay <= 19);
@@ -378,7 +380,7 @@ function Scene({ sensorData, quality, timeOfDay = 12 }: {
       <SeaFloor />
       <Rocks />
       <RockFormations />
-      <AnomalyMarkers />
+      <AnomalyMarkers markers={markers} />
 
       <OrbitControls
         enablePan={false}
@@ -410,10 +412,11 @@ function LoadingFallback() {
   );
 }
 
-function WaterSceneCanvas({ sensorData, quality, timeOfDay }: {
+function WaterSceneCanvas({ sensorData, quality, timeOfDay, markers = [] }: {
   sensorData: SensorData;
   quality: "PERF" | "HIGH" | "ULTRA";
   timeOfDay: number;
+  markers?: Array<{ id: string; type: "critical" | "warning" | "info"; parameter: string; value: number; position: [number, number, number] }>;
 }) {
   return (
     <div className="w-full h-full">
@@ -431,7 +434,7 @@ function WaterSceneCanvas({ sensorData, quality, timeOfDay }: {
           frameloop="always"
           shadows
         >
-          <Scene sensorData={sensorData} quality={quality} timeOfDay={timeOfDay} />
+          <Scene sensorData={sensorData} quality={quality} timeOfDay={timeOfDay} markers={markers} />
         </Canvas>
       </Suspense>
     </div>
@@ -449,6 +452,7 @@ export function WaterScene({
   alertLevel = "none",
   quality = "ULTRA",
   timeOfDay = 12,
+  markers = [],
 }: WaterSceneProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -464,5 +468,5 @@ export function WaterScene({
 
   if (!mounted) return <LoadingFallback />;
 
-  return <WaterSceneCanvas sensorData={sensorData} quality={quality} timeOfDay={timeOfDay} />;
+  return <WaterSceneCanvas sensorData={sensorData} quality={quality} timeOfDay={timeOfDay} markers={markers} />;
 }
